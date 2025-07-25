@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import traceback
 
 st.set_page_config(page_title="Serial Number Merger", layout="centered")
 st.title("Serial Number Merger")
@@ -226,8 +227,13 @@ if amlog_file and export_file and zstatus_file:
                 file_name="sap_upload.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-    except Exception as e:
-        st.error(f"Fout bij verwerken: {e}")
+            
+
+except Exception as e:
+    st.error(f"Fout bij verwerken: {e}")
+    st.text(traceback.format_exc())
+
+   
 
 else:
     st.info("Upload alle drie de bestanden om verder te gaan.")
