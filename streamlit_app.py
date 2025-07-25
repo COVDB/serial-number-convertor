@@ -55,11 +55,6 @@ def categorize_material(mat_num):
     else:
         return "OTHER"
 
-st.write("Aantal rijen na filtering:", len(df_amlog))
-st.write("Unieke categorieën na filtering:", df_amlog['Equipment Category Group'].unique())
-st.dataframe(df_amlog.head(20))
-
-
 amlog_file = st.file_uploader("Upload AM LOG EQUIPMENT LIST", type=["xlsx"])
 export_file = st.file_uploader("Upload Export bestand", type=["xlsx"])
 zstatus_file = st.file_uploader("Upload ZSTATUS export", type=["xlsx"])
@@ -73,28 +68,30 @@ if amlog_file and export_file and zstatus_file:
 
         st.success("Alle bestanden ingelezen!")
 
-        # ----------- CATEGORISATIE & FILTER -----------
-        if "Material Number" in df_amlog.columns:
-            df_amlog["Equipment Category Group"] = df_amlog["Material Number"].apply(categorize_material)
-            category_options = ["ALLE"] + sorted(df_amlog["Equipment Category Group"].unique())
-            selected_category = st.selectbox(
-                "Filter op equipment groep (uit AM LOG 'Material Number')",
-                category_options
-            )
-            if selected_category != "ALLE":
-                df_amlog = df_amlog[df_amlog["Equipment Category Group"] == selected_category]
-            st.info(f"Aantal items na filtering: {len(df_amlog)}")
-        else:
-            st.warning("Kolom 'Material Number' niet gevonden in AM LOG, filter wordt niet toegepast.")
-
-        # ----------- KOLUMSELECTIE -----------
-        # Stap 1: Kolomselectie AM LOG
-        st.write("**Stap 1: Selecteer de kolommen voor AM LOG**")
+        # --- Kolomselectie direct na upload ---
         amlog_cols = df_amlog.columns.tolist()
+        amlog_mat_col = st.selectbox("Material Number (AM LOG)", amlog_cols)
+
+        # --- Categorisatie en filtering ---
+        df_amlog["Equipment Category Group"] = df_amlog[amlog_mat_col].apply(categorize_material)
+        category_options = ["ALLE"] + sorted(df_amlog["Equipment Category Group"].unique())
+        selected_category = st.selectbox(
+            "Filter op equipment groep (uit AM LOG 'Material Number')",
+            category_options
+        )
+        if selected_category != "ALLE":
+            df_amlog = df_amlog[df_amlog["Equipment Category Group"] == selected_category]
+
+        # Debug: Toon filtering-resultaat
+        st.write("Aantal rijen na filtering:", len(df_amlog))
+        st.write("Unieke categorieën na filtering:", df_amlog['Equipment Category Group'].unique())
+        st.dataframe(df_amlog.head(20))
+
+        # --- Overige kolomselecties ---
+        st.write("**Stap 1: Selecteer de kolommen voor AM LOG**")
         amlog_ref_col = st.selectbox("Customer Reference (AM LOG)", amlog_cols)
         amlog_eq_col = st.selectbox("Equipment Number (AM LOG)", amlog_cols)
         amlog_sn_col = st.selectbox("Serial Number (AM LOG)", amlog_cols)
-        amlog_mat_col = st.selectbox("Material Number (AM LOG)", amlog_cols)
         amlog_year_col = st.selectbox("Year of construction (AM LOG)", amlog_cols)
         amlog_month_col = st.selectbox("Month of construction (AM LOG)", amlog_cols)
 
@@ -175,14 +172,14 @@ if amlog_file and export_file and zstatus_file:
 
             # --- SAP OUTPUT ---
             sap_output = pd.DataFrame()
-            sap_output["Equipment Number"] = ""
+            sap_output["Equipment Number"] = ""  # altijd leeg (of zet hier wat je wil uploaden)
             if date_col_name:
                 if not pd.api.types.is_datetime64_any_dtype(merged[date_col_name]):
                     merged[date_col_name] = pd.to_datetime(merged[date_col_name], errors="coerce")
                 sap_output["Date valid from"] = merged[date_col_name].dt.strftime("%d.%m.%Y")
             else:
                 sap_output["Date valid from"] = ""
-            sap_output["Equipment category"] = ""
+            sap_output["Equipment category"] = "s"  # zet hier 's' (zoals gewenst door SAP)
             sap_output["Description"] = merged[export_desc_col]
             sap_output["Sold to partner"] = merged[zstatus_sold_col]
             sap_output["Ship to partner"] = merged[zstatus_ship_col]
