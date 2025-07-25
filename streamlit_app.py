@@ -51,12 +51,11 @@ if amlog_file and export_file and zstatus_file:
         zstatus_ship_col = st.selectbox("Ship-to (ZSTATUS)", zstatus_cols)
         zstatus_created_col = st.selectbox("Created on (ZSTATUS)", zstatus_cols)
 
-
         if st.button("Verwerken"):
             # --- CLEAN & SELECT ---
             amlog_sel = df_amlog[[amlog_ref_col, amlog_eq_col, amlog_sn_col]].copy()
             export_sel = df_export[[export_proj_col, export_doc_col, export_mat_col, export_sold_col, export_desc_col, export_ref_col]].copy()
-            zstatus_sel = df_zstatus[[zstatus_projref_col, zstatus_sold_col, zstatus_ship_col]].copy()
+            zstatus_sel = df_zstatus[[zstatus_projref_col, zstatus_sold_col, zstatus_ship_col, zstatus_created_col]].copy()
 
             # Clean merge keys
             def clean_reference(x):
@@ -88,16 +87,33 @@ if amlog_file and export_file and zstatus_file:
                 zstatus_sel,
                 left_on='Project Reference',
                 right_on=zstatus_projref_col,
-                how='left'
+                how='left',
+                suffixes=('', '_zstatus')
             )
+
+            # --- Zoek de correcte kolomnaam voor "Date valid from" ---
+            merged_cols = merged.columns.tolist()
+            # Zoek exacte of gesuffixte naam van "created on" uit ZSTATUS
+            date_col_name = zstatus_created_col
+            if date_col_name not in merged_cols:
+                # Probeer met mogelijke suffixes
+                candidates = [col for col in merged_cols if date_col_name in col]
+                if candidates:
+                    date_col_name = candidates[0]
+                else:
+                    st.error(f"Kolom '{zstatus_created_col}' niet gevonden in het samengevoegde bestand!")
+                    date_col_name = None
 
             # --- SAP OUTPUT ---
             sap_output = pd.DataFrame()
             sap_output["Equipment Number"] = ""
-            if not pd.api.types.is_datetime64_any_dtype(merged[zstatus_created_col]):
-                merged[zstatus_created_col] = pd.to_datetime(merged[zstatus_created_col], errors="coerce")
-            sap_output["Date valid from"] = merged[zstatus_created_col].dt.strftime("%d.%m.%Y")
-            sap_output["Equipment category"] = "s"        # Of een andere default
+            if date_col_name:
+                if not pd.api.types.is_datetime64_any_dtype(merged[date_col_name]):
+                    merged[date_col_name] = pd.to_datetime(merged[date_col_name], errors="coerce")
+                sap_output["Date valid from"] = merged[date_col_name].dt.strftime("%d.%m.%Y")
+            else:
+                sap_output["Date valid from"] = ""
+            sap_output["Equipment category"] = "s"
             sap_output["Description"] = merged[export_desc_col]
             sap_output["Sold to partner"] = merged[zstatus_sold_col]
             sap_output["Ship to partner"] = merged[zstatus_ship_col]
