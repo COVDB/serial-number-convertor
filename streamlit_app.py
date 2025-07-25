@@ -63,6 +63,7 @@ def categorize_material(mat_num):
     else:
         return "OTHER"
 
+# Uploaders
 amlog_file   = st.file_uploader("Upload AM LOG EQUIPMENT LIST", type=["xlsx"])
 export_file  = st.file_uploader("Upload Export bestand",        type=["xlsx"])
 zstatus_file = st.file_uploader("Upload ZSTATUS export",        type=["xlsx"])
@@ -75,13 +76,10 @@ if amlog_file and export_file and zstatus_file:
         df_zstatus = pd.read_excel(zstatus_file)
         st.success("Alle bestanden ingelezen!")
 
-        # Automatische kolomkoppeling
+        # Kolomtoewijzing
         st.subheader("Kolomtoewijzing")
         edit_columns = st.checkbox("Kolommen wijzigen", value=False)
-
-        amlog_cols   = df_amlog.columns.tolist()
-        export_cols  = df_export.columns.tolist()
-        zstatus_cols = df_zstatus.columns.tolist()
+        amlog_cols, export_cols, zstatus_cols = df_amlog.columns.tolist(), df_export.columns.tolist(), df_zstatus.columns.tolist()
 
         def select_or_auto(label, default, options):
             if edit_columns and default in options:
@@ -110,7 +108,9 @@ if amlog_file and export_file and zstatus_file:
         # Format & categoriseer Material Number
         df_amlog[amlog_mat_col] = df_amlog[amlog_mat_col].apply(safe_material_number)
         df_amlog["Equipment Category Group"] = df_amlog[amlog_mat_col].apply(categorize_material)
-        category_options = ["ALLE"] + sorted(df_amlog["Equipment Category Group"].unique())
+
+        # **NIEUWE STATISCHE FILTER**
+        category_options = ["ALLE", "SHUTTLE", "MCC", "BCC", "OTHER"]
         selected_category = st.selectbox("Filter op equipment groep", category_options)
         if selected_category != "ALLE":
             df_amlog = df_amlog[df_amlog["Equipment Category Group"] == selected_category]
@@ -146,8 +146,8 @@ if amlog_file and export_file and zstatus_file:
                               how="left", suffixes=('', '_zstatus'))
 
             # Zoek date column name
-            merged_cols = merged.columns.tolist()
-            date_col_name = zstatus_created_col if zstatus_created_col in merged_cols else next((c for c in merged_cols if zstatus_created_col in c), None)
+            cols = merged.columns.tolist()
+            date_col_name = zstatus_created_col if zstatus_created_col in cols else next((c for c in cols if zstatus_created_col in c), None)
 
             # Bouw SAP output
             sap_output = pd.DataFrame()
