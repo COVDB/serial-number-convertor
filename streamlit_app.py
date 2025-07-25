@@ -24,8 +24,7 @@ SHUTTLE_CODES = [
     "000000000001001795","000000000001001845","000000000001001752","000000000001008374",
     "000000000001001805","000000000001001709","000000000001008560","000000000001001765",
     "000000000001001775","000000000001008561","000000000001009105","000000000001001777",
-    "000000000001001742","000000000001001813","000000000001009719","000000000010005396",
-    "000000000010003687","000000000010005397"
+    "000000000001001742","000000000001001813","000000000001009719"   
 ]
 
 BCC_CODES = [
@@ -122,9 +121,14 @@ if amlog_file and export_file and zstatus_file:
         zstatus_created_col = select_or_auto("Created on (ZSTATUS)", auto_map_zstatus["Created on (ZSTATUS)"], zstatus_cols)
 
         # --- Zorg dat Material Number altijd correct geformatteerd is voor categorisatie ---
-        df_amlog[amlog_mat_col] = df_amlog[amlog_mat_col].apply(
-            lambda x: str(int(float(x))).zfill(18) if pd.notnull(x) and str(x).strip() != "" else ""
-        )
+        def safe_material_number(x):
+            try:
+                if pd.isnull(x) or str(x).strip().lower() in ["", "null", "(null)"]:
+                    return ""
+                return str(int(float(x))).zfill(18)
+            except Exception:
+                return ""
+        df_amlog[amlog_mat_col] = df_amlog[amlog_mat_col].apply(safe_material_number)
         st.write("Enkele Material Numbers uit AM LOG (na formatting):", df_amlog[amlog_mat_col].head(10).tolist())
 
         df_amlog["Equipment Category Group"] = df_amlog[amlog_mat_col].apply(categorize_material)
@@ -135,10 +139,6 @@ if amlog_file and export_file and zstatus_file:
         )
         if selected_category != "ALLE":
             df_amlog = df_amlog[df_amlog["Equipment Category Group"] == selected_category]
-
-        # st.write("Aantal rijen na filtering:", len(df_amlog))
-        # st.write("Unieke categorieën na filtering:", df_amlog['Equipment Category Group'].unique())
-        # st.dataframe(df_amlog.head(20))
 
         if st.button("Verwerken"):
             amlog_sel = df_amlog[
