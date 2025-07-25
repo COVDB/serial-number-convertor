@@ -24,7 +24,7 @@ SHUTTLE_CODES = [
     "000000000001001795","000000000001001845","000000000001001752","000000000001008374",
     "000000000001001805","000000000001001709","000000000001008560","000000000001001765",
     "000000000001001775","000000000001008561","000000000001009105","000000000001001777",
-    "000000000001001742","000000000001001813","000000000001009719"   
+    "000000000001001742","000000000001001813","000000000001009719"
 ]
 
 BCC_CODES = [
@@ -42,6 +42,15 @@ MCC_CODES = [
     "000000000001006269","000000000001006247","000000000001006273","000000000001008251",
     "000000000001008576","000000000001008253","000000000001009225","000000000001009454"
 ]
+
+def safe_material_number(x):
+    try:
+        # Negeer 'Null', '(Null)', lege waardes
+        if pd.isnull(x) or str(x).strip().lower() in ["", "null", "(null)"]:
+            return ""
+        return str(int(float(x))).zfill(18)
+    except Exception:
+        return ""
 
 def categorize_material(mat_num):
     if mat_num in SHUTTLE_CODES:
@@ -120,14 +129,7 @@ if amlog_file and export_file and zstatus_file:
         zstatus_ship_col = select_or_auto("Ship-to (ZSTATUS)", auto_map_zstatus["Ship-to (ZSTATUS)"], zstatus_cols)
         zstatus_created_col = select_or_auto("Created on (ZSTATUS)", auto_map_zstatus["Created on (ZSTATUS)"], zstatus_cols)
 
-        # --- Zorg dat Material Number altijd correct geformatteerd is voor categorisatie ---
-        def safe_material_number(x):
-            try:
-                if pd.isnull(x) or str(x).strip().lower() in ["", "null", "(null)"]:
-                    return ""
-                return str(int(float(x))).zfill(18)
-            except Exception:
-                return ""
+        # --- Veilige conversie Material Number ---
         df_amlog[amlog_mat_col] = df_amlog[amlog_mat_col].apply(safe_material_number)
         st.write("Enkele Material Numbers uit AM LOG (na formatting):", df_amlog[amlog_mat_col].head(10).tolist())
 
