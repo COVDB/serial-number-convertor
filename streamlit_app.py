@@ -45,7 +45,6 @@ MCC_CODES = [
 
 def safe_material_number(x):
     try:
-        # Negeer 'Null', '(Null)', lege waardes
         if pd.isnull(x) or str(x).strip().lower() in ["", "null", "(null)"]:
             return ""
         return str(int(float(x))).zfill(18)
@@ -196,7 +195,7 @@ if amlog_file and export_file and zstatus_file:
 
             sap_output = pd.DataFrame()
             sap_output["Equipment Number"] = ""
-            if date_col_name:
+            if isinstance(date_col_name, str) and date_col_name in merged.columns:
                 if not pd.api.types.is_datetime64_any_dtype(merged[date_col_name]):
                     merged[date_col_name] = pd.to_datetime(merged[date_col_name], errors="coerce")
                 sap_output["Date valid from"] = merged[date_col_name].dt.strftime("%d.%m.%Y")
