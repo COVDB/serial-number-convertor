@@ -55,6 +55,11 @@ def categorize_material(mat_num):
     else:
         return "OTHER"
 
+st.write("Aantal rijen na filtering:", len(df_amlog))
+st.write("Unieke categorieën na filtering:", df_amlog['Equipment Category Group'].unique())
+st.dataframe(df_amlog.head(20))
+
+
 amlog_file = st.file_uploader("Upload AM LOG EQUIPMENT LIST", type=["xlsx"])
 export_file = st.file_uploader("Upload Export bestand", type=["xlsx"])
 zstatus_file = st.file_uploader("Upload ZSTATUS export", type=["xlsx"])
