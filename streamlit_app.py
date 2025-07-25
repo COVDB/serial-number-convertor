@@ -24,8 +24,8 @@ SHUTTLE_CODES = [
     "000000000001001795","000000000001001845","000000000001001752","000000000001008374",
     "000000000001001805","000000000001001709","000000000001008560","000000000001001765",
     "000000000001001775","000000000001008561","000000000001009105","000000000001001777",
-    "000000000001001742","000000000001001813","000000000001009719","000000000001007905",
-    "000000000001008561"
+    "000000000001001742","000000000001001813","000000000001009719","000000000010005396",
+    "000000000010003687","000000000010005397"
 ]
 
 BCC_CODES = [
@@ -90,6 +90,8 @@ if amlog_file and export_file and zstatus_file:
         amlog_eq_col = st.selectbox("Equipment Number (AM LOG)", amlog_cols)
         amlog_sn_col = st.selectbox("Serial Number (AM LOG)", amlog_cols)
         amlog_mat_col = st.selectbox("Material Number (AM LOG)", amlog_cols)
+        amlog_year_col = st.selectbox("Year of construction (AM LOG)", amlog_cols)
+        amlog_month_col = st.selectbox("Month of construction (AM LOG)", amlog_cols)
 
         # Stap 2: Kolomselectie EXPORT
         st.write("**Stap 2: Selecteer de kolommen voor EXPORT**")
@@ -111,9 +113,15 @@ if amlog_file and export_file and zstatus_file:
 
         if st.button("Verwerken"):
             # --- CLEAN & SELECT ---
-            amlog_sel = df_amlog[[amlog_ref_col, amlog_eq_col, amlog_sn_col, amlog_mat_col, "Equipment Category Group"]].copy()
-            export_sel = df_export[[export_proj_col, export_doc_col, export_mat_col, export_sold_col, export_desc_col, export_ref_col]].copy()
-            zstatus_sel = df_zstatus[[zstatus_projref_col, zstatus_sold_col, zstatus_ship_col, zstatus_created_col]].copy()
+            amlog_sel = df_amlog[
+                [amlog_ref_col, amlog_eq_col, amlog_sn_col, amlog_mat_col, "Equipment Category Group", amlog_year_col, amlog_month_col]
+            ].copy()
+            export_sel = df_export[
+                [export_proj_col, export_doc_col, export_mat_col, export_sold_col, export_desc_col, export_ref_col]
+            ].copy()
+            zstatus_sel = df_zstatus[
+                [zstatus_projref_col, zstatus_sold_col, zstatus_ship_col, zstatus_created_col]
+            ].copy()
 
             # Clean merge keys
             def clean_reference(x):
@@ -169,7 +177,7 @@ if amlog_file and export_file and zstatus_file:
                 sap_output["Date valid from"] = merged[date_col_name].dt.strftime("%d.%m.%Y")
             else:
                 sap_output["Date valid from"] = ""
-            sap_output["Equipment category"] = "s"
+            sap_output["Equipment category"] = ""
             sap_output["Description"] = merged[export_desc_col]
             sap_output["Sold to partner"] = merged[zstatus_sold_col]
             sap_output["Ship to partner"] = merged[zstatus_ship_col]
@@ -179,8 +187,8 @@ if amlog_file and export_file and zstatus_file:
             sap_output["Warranty end date"] = ""
             sap_output["Indicator, Whether Technical Object Should Inherit Warranty"] = "x"
             sap_output["Indicator: Pass on Warranty"] = "x"
-            sap_output["Construction year"] = ""
-            sap_output["Construction month"] = ""
+            sap_output["Construction year"] = merged[amlog_year_col]
+            sap_output["Construction month"] = merged[amlog_month_col]
 
             st.success(f"SAP output met {len(sap_output)} rijen klaar voor download.")
             st.dataframe(sap_output.head(100))
