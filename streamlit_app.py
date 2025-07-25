@@ -179,11 +179,11 @@ if amlog_file and export_file and zstatus_file:
                 sap_output["Date valid from"] = merged[date_col_name].dt.strftime("%d.%m.%Y")
             else:
                 sap_output["Date valid from"] = ""
-            sap_output["Equipment category"] = "s"  # zet hier 's' (zoals gewenst door SAP)
+            sap_output["Equipment category"] = "S"  # zet hier 's' (zoals gewenst door SAP)
             sap_output["Description"] = merged[export_desc_col]
             sap_output["Sold to partner"] = merged[zstatus_sold_col]
             sap_output["Ship to partner"] = merged[zstatus_ship_col]
-            sap_output["Material Number"] = merged[amlog_mat_col]
+            sap_output["Material Number"] = merged[export_mat_col]
             sap_output["Serial number"] = merged[amlog_sn_col]
             sap_output["Begin Guarantee"] = ""
             sap_output["Warranty end date"] = ""
