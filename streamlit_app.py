@@ -68,12 +68,13 @@ zstatus_file = st.file_uploader("Upload ZSTATUS export", type=["xlsx"])
 
 if amlog_file and export_file and zstatus_file:
     try:
+        # Inlezen
         df_amlog = pd.read_excel(amlog_file)
         df_export = pd.read_excel(export_file)
         df_zstatus = pd.read_excel(zstatus_file)
         st.success("Alle bestanden ingelezen!")
 
-        # --- Automatische kolomkoppeling (default op naam) ---
+        # Automatische kolomkoppeling
         auto_map_amlog = {
             "Customer Reference (AM LOG)": "Customer Reference",
             "Equipment Number (AM LOG)": "Equipment Number",
@@ -110,127 +111,107 @@ if amlog_file and export_file and zstatus_file:
             else:
                 return default if default in options else options[0]
 
-        amlog_ref_col = select_or_auto("Customer Reference (AM LOG)", auto_map_amlog["Customer Reference (AM LOG)"], amlog_cols)
-        amlog_eq_col = select_or_auto("Equipment Number (AM LOG)", auto_map_amlog["Equipment Number (AM LOG)"], amlog_cols)
-        amlog_sn_col = select_or_auto("Serial Number (AM LOG)", auto_map_amlog["Serial Number (AM LOG)"], amlog_cols)
-        amlog_mat_col = select_or_auto("Material Number (AM LOG)", auto_map_amlog["Material Number (AM LOG)"], amlog_cols)
-        amlog_year_col = select_or_auto("Year of construction (AM LOG)", auto_map_amlog["Year of construction (AM LOG)"], amlog_cols)
-        amlog_month_col = select_or_auto("Month of construction (AM LOG)", auto_map_amlog["Month of construction (AM LOG)"], amlog_cols)
+        # Kolomselecties
+        amlog_ref_col    = select_or_auto("Customer Reference (AM LOG)", auto_map_amlog["Customer Reference (AM LOG)"], amlog_cols)
+        amlog_eq_col     = select_or_auto("Equipment Number (AM LOG)",    auto_map_amlog["Equipment Number (AM LOG)"],    amlog_cols)
+        amlog_sn_col     = select_or_auto("Serial Number (AM LOG)",       auto_map_amlog["Serial Number (AM LOG)"],       amlog_cols)
+        amlog_mat_col    = select_or_auto("Material Number (AM LOG)",     auto_map_amlog["Material Number (AM LOG)"],     amlog_cols)
+        amlog_year_col   = select_or_auto("Year of construction (AM LOG)",auto_map_amlog["Year of construction (AM LOG)"],amlog_cols)
+        amlog_month_col  = select_or_auto("Month of construction (AM LOG)",auto_map_amlog["Month of construction (AM LOG)"],amlog_cols)
 
-        export_ref_col = select_or_auto("Purch.Doc (EXPORT)", auto_map_export["Purch.Doc (EXPORT)"], export_cols)
-        export_proj_col = select_or_auto("Project Reference (EXPORT)", auto_map_export["Project Reference (EXPORT)"], export_cols)
-        export_doc_col = select_or_auto("Document (EXPORT)", auto_map_export["Document (EXPORT)"], export_cols)
-        export_mat_col = select_or_auto("Material (EXPORT)", auto_map_export["Material (EXPORT)"], export_cols)
-        export_sold_col = select_or_auto("Sold-to party (EXPORT)", auto_map_export["Sold-to party (EXPORT)"], export_cols)
-        export_desc_col = select_or_auto("Description (EXPORT)", auto_map_export["Description (EXPORT)"], export_cols)
+        export_ref_col   = select_or_auto("Purch.Doc (EXPORT)",           auto_map_export["Purch.Doc (EXPORT)"],          export_cols)
+        export_proj_col  = select_or_auto("Project Reference (EXPORT)",   auto_map_export["Project Reference (EXPORT)"],  export_cols)
+        export_doc_col   = select_or_auto("Document (EXPORT)",            auto_map_export["Document (EXPORT)"],           export_cols)
+        export_mat_col   = select_or_auto("Material (EXPORT)",            auto_map_export["Material (EXPORT)"],           export_cols)
+        export_sold_col  = select_or_auto("Sold-to party (EXPORT)",       auto_map_export["Sold-to party (EXPORT)"],      export_cols)
+        export_desc_col  = select_or_auto("Description (EXPORT)",         auto_map_export["Description (EXPORT)"],        export_cols)
 
-        zstatus_projref_col = select_or_auto("ProjRef (ZSTATUS)", auto_map_zstatus["ProjRef (ZSTATUS)"], zstatus_cols)
-        zstatus_sold_col = select_or_auto("Sold-to pt (ZSTATUS)", auto_map_zstatus["Sold-to pt (ZSTATUS)"], zstatus_cols)
-        zstatus_ship_col = select_or_auto("Ship-to (ZSTATUS)", auto_map_zstatus["Ship-to (ZSTATUS)"], zstatus_cols)
-        zstatus_created_col = select_or_auto("Created on (ZSTATUS)", auto_map_zstatus["Created on (ZSTATUS)"], zstatus_cols)
+        zstatus_projref_col = select_or_auto("ProjRef (ZSTATUS)",       auto_map_zstatus["ProjRef (ZSTATUS)"],     zstatus_cols)
+        zstatus_sold_col    = select_or_auto("Sold-to pt (ZSTATUS)",   auto_map_zstatus["Sold-to pt (ZSTATUS)"], zstatus_cols)
+        zstatus_ship_col    = select_or_auto("Ship-to (ZSTATUS)",      auto_map_zstatus["Ship-to (ZSTATUS)"],   zstatus_cols)
+        zstatus_created_col = select_or_auto("Created on (ZSTATUS)",   auto_map_zstatus["Created on (ZSTATUS)"],zstatus_cols)
 
-        # --- Veilige conversie Material Number ---
+        # Safe formatting + filter
         df_amlog[amlog_mat_col] = df_amlog[amlog_mat_col].apply(safe_material_number)
-        st.write("Enkele Material Numbers uit AM LOG (na formatting):", df_amlog[amlog_mat_col].head(10).tolist())
-
         df_amlog["Equipment Category Group"] = df_amlog[amlog_mat_col].apply(categorize_material)
         category_options = ["ALLE"] + sorted(df_amlog["Equipment Category Group"].unique())
-        selected_category = st.selectbox(
-            "Filter op equipment groep (uit AM LOG 'Material Number')",
-            category_options
-        )
+        selected_category = st.selectbox("Filter op equipment groep", category_options)
         if selected_category != "ALLE":
             df_amlog = df_amlog[df_amlog["Equipment Category Group"] == selected_category]
 
+        # Verwerking bij knop
         if st.button("Verwerken"):
-            try:
-                amlog_sel = df_amlog[
-                    [amlog_ref_col, amlog_eq_col, amlog_sn_col, amlog_mat_col, "Equipment Category Group", amlog_year_col, amlog_month_col]
-                ].copy()
-                export_sel = df_export[
-                    [export_proj_col, export_doc_col, export_mat_col, export_sold_col, export_desc_col, export_ref_col]
-                ].copy()
-                zstatus_sel = df_zstatus[
-                    [zstatus_projref_col, zstatus_sold_col, zstatus_ship_col, zstatus_created_col]
-                ].copy()
+            amlog_sel = df_amlog[[amlog_ref_col, amlog_eq_col, amlog_sn_col, amlog_mat_col,
+                                  "Equipment Category Group", amlog_year_col, amlog_month_col]].copy()
+            export_sel = df_export[[export_proj_col, export_doc_col, export_mat_col,
+                                    export_sold_col, export_desc_col, export_ref_col]].copy()
+            zstatus_sel= df_zstatus[[zstatus_projref_col, zstatus_sold_col,
+                                     zstatus_ship_col, zstatus_created_col]].copy()
 
-                def clean_reference(x):
-                    if pd.isnull(x):
-                        return ""
-                    try:
-                        return str(int(float(x))).strip()
-                    except:
-                        return str(x).strip()
+            # clean keys
+            def clean_reference(x):
+                if pd.isnull(x): return ""
+                try:            return str(int(float(x))).strip()
+                except:        return str(x).strip()
 
-                amlog_sel[amlog_ref_col] = amlog_sel[amlog_ref_col].apply(clean_reference)
-                export_sel[export_ref_col] = export_sel[export_ref_col].apply(clean_reference)
-                zstatus_sel[zstatus_projref_col] = zstatus_sel[zstatus_projref_col].apply(clean_reference)
+            amlog_sel[amlog_ref_col]  = amlog_sel[amlog_ref_col].apply(clean_reference)
+            export_sel[export_ref_col] = export_sel[export_ref_col].apply(clean_reference)
+            zstatus_sel[zstatus_projref_col] = zstatus_sel[zstatus_projref_col].apply(clean_reference)
 
-                merged = pd.merge(
-                    amlog_sel,
-                    export_sel,
-                    left_on=amlog_ref_col,
-                    right_on=export_ref_col,
-                    how="left"
-                )
+            # merges
+            merged = pd.merge(amlog_sel, export_sel,
+                              left_on=amlog_ref_col, right_on=export_ref_col,
+                              how="left")
+            merged['Project Reference'] = merged[export_proj_col].astype(str).str.strip()
+            zstatus_sel[zstatus_projref_col] = zstatus_sel[zstatus_projref_col].astype(str).str.strip()
+            merged = pd.merge(merged, zstatus_sel,
+                              left_on='Project Reference', right_on=zstatus_projref_col,
+                              how='left', suffixes=('', '_zstatus'))
 
-                merged['Project Reference'] = merged[export_proj_col].astype(str).str.strip()
-                zstatus_sel[zstatus_projref_col] = zstatus_sel[zstatus_projref_col].astype(str).str.strip()
-                merged = pd.merge(
-                    merged,
-                    zstatus_sel,
-                    left_on='Project Reference',
-                    right_on=zstatus_projref_col,
-                    how='left',
-                    suffixes=('', '_zstatus')
-                )
+            # date_col_name safe check
+            merged_cols = merged.columns.tolist()
+            date_col_name = zstatus_created_col if zstatus_created_col in merged_cols else (
+                next((c for c in merged_cols if zstatus_created_col in c), None)
+            )
 
-                merged_cols = merged.columns.tolist()
-                date_col_name = zstatus_created_col
-                if date_col_name not in merged_cols:
-                    candidates = [col for col in merged_cols if date_col_name in col]
-                    if candidates:
-                        date_col_name = candidates[0]
-                    else:
-                        st.error(f"Kolom '{zstatus_created_col}' niet gevonden in het samengevoegde bestand!")
-                        date_col_name = None
+            # build output
+            sap_output = pd.DataFrame()
+            sap_output["Equipment Number"] = ""
+            if isinstance(date_col_name, str) and date_col_name in merged.columns:
+                if not pd.api.types.is_datetime64_any_dtype(merged[date_col_name]):
+                    merged[date_col_name] = pd.to_datetime(merged[date_col_name], errors="coerce")
+                sap_output["Date valid from"] = merged[date_col_name].dt.strftime("%d.%m.%Y")
+            else:
+                sap_output["Date valid from"] = ""
+            sap_output["Equipment category"] = "S"
+            sap_output["Description"]     = merged[export_desc_col]
+            sap_output["Sold to partner"] = merged[zstatus_sold_col]
+            sap_output["Ship to partner"] = merged[zstatus_ship_col]
+            sap_output["Material Number"] = merged[export_mat_col]
+            sap_output["Serial number"]   = merged[amlog_sn_col]
+            sap_output["Begin Guarantee"] = ""
+            sap_output["Warranty end date"]= ""
+            sap_output["Indicator, Whether Technical Object Should Inherit Warranty"] = "x"
+            sap_output["Indicator: Pass on Warranty"] = "x"
+            sap_output["Construction year"]  = merged[amlog_year_col]
+            sap_output["Construction month"] = merged[amlog_month_col]
 
-                sap_output = pd.DataFrame()
-                sap_output["Equipment Number"] = ""
-                if isinstance(date_col_name, str) and date_col_name in merged.columns:
-                    if not pd.api.types.is_datetime64_any_dtype(merged[date_col_name]):
-                        merged[date_col_name] = pd.to_datetime(merged[date_col_name], errors="coerce")
-                    sap_output["Date valid from"] = merged[date_col_name].dt.strftime("%d.%m.%Y")
-                else:
-                    sap_output["Date valid from"] = ""
-                sap_output["Equipment category"] = "S"
-                sap_output["Description"] = merged[export_desc_col]
-                sap_output["Sold to partner"] = merged[zstatus_sold_col]
-                sap_output["Ship to partner"] = merged[zstatus_ship_col]
-                sap_output["Material Number"] = merged[export_mat_col]
-                sap_output["Serial number"] = merged[amlog_sn_col]
-                sap_output["Begin Guarantee"] = ""
-                sap_output["Warranty end date"] = ""
-                sap_output["Indicator, Whether Technical Object Should Inherit Warranty"] = "x"
-                sap_output["Indicator: Pass on Warranty"] = "x"
-                sap_output["Construction year"] = merged[amlog_year_col]
-                sap_output["Construction month"] = merged[amlog_month_col]
+            st.success(f"SAP output met {len(sap_output)} rijen klaar voor download.")
+            st.dataframe(sap_output.head(100))
 
-                st.success(f"SAP output met {len(sap_output)} rijen klaar voor download.")
-                st.dataframe(sap_output.head(100))
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                sap_output.to_excel(writer, index=False, sheet_name="SAP Upload")
+            st.download_button(
+                label="Download SAP-upload Excel",
+                data=output.getvalue(),
+                file_name="sap_upload.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    sap_output.to_excel(writer, index=False, sheet_name="SAP Upload")
-                st.download_button(
-                    label="Download SAP-upload Excel",
-                    data=output.getvalue(),
-                    file_name="sap_upload.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            except Exception as e:
-                st.error(f"Fout bij verwerken: {e}")
-                st.text(traceback.format_exc())
+    except Exception as e:
+        st.error(f"Fout bij verwerken: {e}")
+        st.text(traceback.format_exc())
 
 else:
     st.info("Upload alle drie de bestanden om verder te gaan.")
