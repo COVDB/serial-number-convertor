@@ -45,6 +45,8 @@ if amlog_file and export_file:
             # Zet beide merge-kolommen expliciet om naar string/tekst
             amlog_sel[amlog_ref_col] = amlog_sel[amlog_ref_col].astype(str).str.strip()
             export_sel[export_ref_col] = export_sel[export_ref_col].astype(str).str.strip()
+            st.write("Unieke waardes Customer Reference (AM LOG):", amlog_sel[amlog_ref_col].unique())
+            st.write("Unieke waardes Purch.Doc (Export):", export_sel[export_ref_col].unique())
 
             # Merge op referentie
             merged = pd.merge(
