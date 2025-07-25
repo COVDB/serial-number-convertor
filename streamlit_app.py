@@ -37,55 +37,54 @@ if amlog_file and export_file:
         export_sold_col = st.selectbox("Sold-to party (EXPORT)", export_cols)
         export_desc_col = st.selectbox("Description (EXPORT)", export_cols)
 
-       if st.button("Verwerken"):
-    amlog_sel = df_amlog[[amlog_ref_col, amlog_eq_col, amlog_sn_col]].copy()
-    export_sel = df_export[[export_proj_col, export_doc_col, export_mat_col, export_sold_col, export_desc_col, export_ref_col]].copy()
+        if st.button("Verwerken"):
+            amlog_sel = df_amlog[[amlog_ref_col, amlog_eq_col, amlog_sn_col]].copy()
+            export_sel = df_export[[export_proj_col, export_doc_col, export_mat_col, export_sold_col, export_desc_col, export_ref_col]].copy()
 
-    def clean_reference(x):
-        if pd.isnull(x):
-            return ""
-        try:
-            return str(int(float(x))).strip()
-        except:
-            return str(x).strip()
+            def clean_reference(x):
+                if pd.isnull(x):
+                    return ""
+                try:
+                    return str(int(float(x))).strip()
+                except:
+                    return str(x).strip()
 
-    amlog_sel[amlog_ref_col] = amlog_sel[amlog_ref_col].apply(clean_reference)
-    export_sel[export_ref_col] = export_sel[export_ref_col].apply(clean_reference)
+            amlog_sel[amlog_ref_col] = amlog_sel[amlog_ref_col].apply(clean_reference)
+            export_sel[export_ref_col] = export_sel[export_ref_col].apply(clean_reference)
 
-    st.write("Unieke waardes Customer Reference (AM LOG):", amlog_sel[amlog_ref_col].unique())
-    st.write("Unieke waardes Purch.Doc (Export):", export_sel[export_ref_col].unique())
+            st.write("Unieke waardes Customer Reference (AM LOG):", amlog_sel[amlog_ref_col].unique())
+            st.write("Unieke waardes Purch.Doc (Export):", export_sel[export_ref_col].unique())
 
-    merged = pd.merge(
-        amlog_sel,
-        export_sel,
-        left_on=amlog_ref_col,
-        right_on=export_ref_col,
-        how="left"
-    )
+            merged = pd.merge(
+                amlog_sel,
+                export_sel,
+                left_on=amlog_ref_col,
+                right_on=export_ref_col,
+                how="left"
+            )
 
-    st.write("Aantal gematchte rijen:", merged[export_proj_col].notna().sum())
-    st.write("Aantal niet-gematchte rijen:", merged[export_proj_col].isna().sum())
+            st.write("Aantal gematchte rijen:", merged[export_proj_col].notna().sum())
+            st.write("Aantal niet-gematchte rijen:", merged[export_proj_col].isna().sum())
 
-    output_cols = [
-        export_proj_col, export_doc_col, export_mat_col, export_sold_col, export_desc_col, export_ref_col,
-        amlog_eq_col, amlog_sn_col
-    ]
-    merged = merged[output_cols]
+            output_cols = [
+                export_proj_col, export_doc_col, export_mat_col, export_sold_col, export_desc_col, export_ref_col,
+                amlog_eq_col, amlog_sn_col
+            ]
+            merged = merged[output_cols]
 
-    st.success(f"Samengevoegd! {len(merged)} rijen in output.")
-    st.dataframe(merged.head(100))
+            st.success(f"Samengevoegd! {len(merged)} rijen in output.")
+            st.dataframe(merged.head(100))
 
-    # Download als Excel
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        merged.to_excel(writer, index=False, sheet_name="Merged")
-    st.download_button(
-        label="Download resultaat als Excel",
-        data=output.getvalue(),
-        file_name="merged_output.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
+            # Download als Excel
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                merged.to_excel(writer, index=False, sheet_name="Merged")
+            st.download_button(
+                label="Download resultaat als Excel",
+                data=output.getvalue(),
+                file_name="merged_output.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
     except Exception as e:
         st.error(f"Fout bij verwerken: {e}")
 else:
