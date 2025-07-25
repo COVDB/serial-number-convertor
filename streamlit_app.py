@@ -41,6 +41,10 @@ if amlog_file and export_file:
             # Alleen relevante kolommen selecteren
             amlog_sel = df_amlog[[amlog_ref_col, amlog_eq_col, amlog_sn_col]]
             export_sel = df_export[[export_proj_col, export_doc_col, export_mat_col, export_sold_col, export_desc_col, export_ref_col]]
+            
+            # Zet beide merge-kolommen expliciet om naar string/tekst
+            amlog_sel[amlog_ref_col] = amlog_sel[amlog_ref_col].astype(str).str.strip()
+            export_sel[export_ref_col] = export_sel[export_ref_col].astype(str).str.strip()
 
             # Merge op referentie
             merged = pd.merge(
