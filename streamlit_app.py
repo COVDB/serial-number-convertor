@@ -63,7 +63,7 @@ def categorize_material(mat_num):
     else:
         return "OTHER"
 
-# Uploader
+# Uploaders
 amlog_file   = st.file_uploader("Upload AM LOG EQUIPMENT LIST", type=["xlsx"])
 export_file  = st.file_uploader("Upload Export bestand",        type=["xlsx"])
 zstatus_file = st.file_uploader("Upload ZSTATUS export",        type=["xlsx"])
@@ -76,14 +76,16 @@ if amlog_file and export_file and zstatus_file:
         df_zstatus = pd.read_excel(zstatus_file)
         st.success("Alle bestanden ingelezen!")
 
+        # Automatische kolomkoppeling
         # Kolomtoewijzing
         st.subheader("Kolomtoewijzing")
         edit_columns = st.checkbox("Kolommen wijzigen", value=False)
-        amlog_cols, export_cols, zstatus_cols = (
-            df_amlog.columns.tolist(),
-            df_export.columns.tolist(),
-            df_zstatus.columns.tolist()
-        )
+
+        amlog_cols   = df_amlog.columns.tolist()
+        export_cols  = df_export.columns.tolist()
+        zstatus_cols = df_zstatus.columns.tolist()
+        amlog_cols, export_cols, zstatus_cols = df_amlog.columns.tolist(), df_export.columns.tolist(), df_zstatus.columns.tolist()
+
         def select_or_auto(label, default, options):
             if edit_columns and default in options:
                 return st.selectbox(label, options, index=options.index(default))
@@ -108,37 +110,27 @@ if amlog_file and export_file and zstatus_file:
         zstatus_ship_col    = select_or_auto("Ship-to (ZSTATUS)",      "Ship-to",   zstatus_cols)
         zstatus_created_col = select_or_auto("Created on (ZSTATUS)",   "Created on",zstatus_cols)
 
-        # Format & categorisatie Material Number
+        # Format & categoriseer Material Number
         df_amlog[amlog_mat_col] = df_amlog[amlog_mat_col].apply(safe_material_number)
         df_amlog["Equipment Category Group"] = df_amlog[amlog_mat_col].apply(categorize_material)
+        category_options = ["ALLE"] + sorted(df_amlog["Equipment Category Group"].unique())
 
-        # **Filter op vaste categorieën**  
+        # **NIEUWE STATISCHE FILTER**
         category_options = ["ALLE", "SHUTTLE", "MCC", "BCC", "OTHER"]
         selected_category = st.selectbox("Filter op equipment groep", category_options)
         if selected_category != "ALLE":
             df_amlog = df_amlog[df_amlog["Equipment Category Group"] == selected_category]
 
         if st.button("Verwerken"):
-            # subsets
-            amlog_sel  = df_amlog[
-                [amlog_ref_col, amlog_eq_col, amlog_sn_col,
-                 amlog_mat_col, "Equipment Category Group",
-                 amlog_year_col, amlog_month_col]
-            ].copy()
+            # Subsets
+            amlog_sel  = df_amlog[[amlog_ref_col,amlog_eq_col,amlog_sn_col,amlog_mat_col,
+                                   "Equipment Category Group",amlog_year_col,amlog_month_col]].copy()
+            export_sel = df_export[[export_proj_col,export_doc_col,export_mat_col,
+                                    export_sold_col,export_desc_col,export_ref_col]].copy()
+            zstatus_sel= df_zstatus[[zstatus_projref_col,zstatus_sold_col,
+                                     zstatus_ship_col,zstatus_created_col]].copy()
 
-            # --- UNIQUE EXPORT OP PURCH.DOC zodat we niet vermenigvuldigen ---
-            export_sel = df_export[
-                [export_proj_col, export_doc_col,
-                 export_mat_col, export_sold_col,
-                 export_desc_col, export_ref_col]
-            ].drop_duplicates(subset=[export_ref_col]).copy()
-
-            zstatus_sel = df_zstatus[
-                [zstatus_projref_col, zstatus_sold_col,
-                 zstatus_ship_col, zstatus_created_col]
-            ].copy()
-
-            # clean keys vectorized
+            # Vectorized clean keys
             for df, col in [(amlog_sel,amlog_ref_col),(export_sel,export_ref_col),(zstatus_sel,zstatus_projref_col)]:
                 df[col] = (
                     df[col]
@@ -148,25 +140,24 @@ if amlog_file and export_file and zstatus_file:
                     .str.strip()
                 )
 
-            # Merge
-            merged = pd.merge(
-                amlog_sel, export_sel,
-                left_on=amlog_ref_col, right_on=export_ref_col,
-                how="left"
-            )
-            merged["Project Reference"] = merged[export_proj_col].astype(str).str.strip()
+            # Merge 1
+            merged = pd.merge(amlog_sel, export_sel,
+                              left_on=amlog_ref_col, right_on=export_ref_col,
+                              how="left")
+            # Merge 2
+            merged['Project Reference'] = merged[export_proj_col].astype(str).str.strip()
             zstatus_sel[zstatus_projref_col] = zstatus_sel[zstatus_projref_col].astype(str).str.strip()
-            merged = pd.merge(
-                merged, zstatus_sel,
-                left_on="Project Reference", right_on=zstatus_projref_col,
-                how="left", suffixes=("", "_zstatus")
-            )
+            merged = pd.merge(merged, zstatus_sel,
+                              left_on='Project Reference', right_on=zstatus_projref_col,
+                              how="left", suffixes=('', '_zstatus'))
 
-            # date col
+            # Zoek date column name
+            merged_cols = merged.columns.tolist()
+            date_col_name = zstatus_created_col if zstatus_created_col in merged_cols else next((c for c in merged_cols if zstatus_created_col in c), None)
             cols = merged.columns.tolist()
             date_col_name = zstatus_created_col if zstatus_created_col in cols else next((c for c in cols if zstatus_created_col in c), None)
 
-            # SAP output
+            # Bouw SAP output
             sap_output = pd.DataFrame()
             sap_output["Equipment Number"] = ""
             if isinstance(date_col_name, str) and date_col_name in merged:
@@ -192,7 +183,7 @@ if amlog_file and export_file and zstatus_file:
 
             # Download
             buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            with pd.ExcelWriter(buf, engine='openpyxl') as writer:
                 sap_output.to_excel(writer, index=False, sheet_name="SAP Upload")
             st.download_button(
                 label="Download SAP-upload Excel",
