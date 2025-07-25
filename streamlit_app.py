@@ -49,6 +49,8 @@ if amlog_file and export_file and zstatus_file:
         zstatus_projref_col = st.selectbox("ProjRef (ZSTATUS)", zstatus_cols)
         zstatus_sold_col = st.selectbox("Sold-to pt (ZSTATUS)", zstatus_cols)
         zstatus_ship_col = st.selectbox("Ship-to (ZSTATUS)", zstatus_cols)
+        zstatus_created_col = st.selectbox("Created on (ZSTATUS)", zstatus_cols)
+
 
         if st.button("Verwerken"):
             # --- CLEAN & SELECT ---
@@ -91,8 +93,10 @@ if amlog_file and export_file and zstatus_file:
 
             # --- SAP OUTPUT ---
             sap_output = pd.DataFrame()
-            sap_output["Equipment Number"] = merged[amlog_eq_col]
-            sap_output["Date valid from"] = ""            # Leeg of automatische datum
+            sap_output["Equipment Number"] = ""
+            if not pd.api.types.is_datetime64_any_dtype(merged[zstatus_created_col]):
+                merged[zstatus_created_col] = pd.to_datetime(merged[zstatus_created_col], errors="coerce")
+            sap_output["Date valid from"] = merged[zstatus_created_col].dt.strftime("%d.%m.%Y")
             sap_output["Equipment category"] = "s"        # Of een andere default
             sap_output["Description"] = merged[export_desc_col]
             sap_output["Sold to partner"] = merged[zstatus_sold_col]
