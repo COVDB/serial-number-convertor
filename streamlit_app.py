@@ -15,6 +15,7 @@ st.write("""
 6. Klik op 'Verwerken'
 """)
 
+# --- Materiaalgroepen bovenin ---
 SHUTTLE_CODES = [
     "000000000001001917","000000000001001808","000000000001001749","000000000001001776",
     "000000000001001911","000000000001001755","000000000001001760","000000000001001809",
@@ -53,7 +54,6 @@ def safe_material_number(x):
         return ""
 
 def categorize_material(mat_num):
-    # Eerst opvullen tot 18 tekens, zodat codes overeenkomen
     s = str(mat_num).zfill(18)
     if s in SHUTTLE_CODES:
         return "SHUTTLE"
@@ -64,12 +64,14 @@ def categorize_material(mat_num):
     else:
         return "OTHER"
 
+# File uploaders
 amlog_file   = st.file_uploader("Upload AM LOG EQUIPMENT LIST", type=["xlsx"])
 export_file  = st.file_uploader("Upload Export bestand",        type=["xlsx"])
 zstatus_file = st.file_uploader("Upload ZSTATUS export",        type=["xlsx"])
 
 if amlog_file and export_file and zstatus_file:
     try:
+        # Inlezen
         df_amlog   = pd.read_excel(amlog_file)
         df_export  = pd.read_excel(export_file)
         df_zstatus = pd.read_excel(zstatus_file)
@@ -89,6 +91,7 @@ if amlog_file and export_file and zstatus_file:
                 return st.selectbox(label, options, index=options.index(default))
             return default if default in options else st.selectbox(label, options)
 
+        # AM LOG
         amlog_ref_col   = select_or_auto("Customer Reference (AM LOG)",   "Customer Reference",   amlog_cols)
         amlog_eq_col    = select_or_auto("Equipment Number (AM LOG)",    "Equipment Number",     amlog_cols)
         amlog_sn_col    = select_or_auto("Serial Number (AM LOG)",       "Serial Number",        amlog_cols)
@@ -96,6 +99,7 @@ if amlog_file and export_file and zstatus_file:
         amlog_year_col  = select_or_auto("Year of construction (AM LOG)","Year of construction", amlog_cols)
         amlog_month_col = select_or_auto("Month of construction (AM LOG)","Month of construction",amlog_cols)
 
+        # EXPORT
         export_ref_col  = select_or_auto("Purch.Doc (EXPORT)",           "Purch.Doc",         export_cols)
         export_proj_col = select_or_auto("Project Reference (EXPORT)",   "Project Reference",export_cols)
         export_doc_col  = select_or_auto("Document (EXPORT)",            "Document",          export_cols)
@@ -103,17 +107,124 @@ if amlog_file and export_file and zstatus_file:
         export_sold_col = select_or_auto("Sold-to party (EXPORT)",       "Sold-to party",     export_cols)
         export_desc_col = select_or_auto("Description (EXPORT)",         "Description",       export_cols)
 
+        # ZSTATUS
         zstatus_projref_col = select_or_auto("ProjRef (ZSTATUS)",      "ProjRef",   zstatus_cols)
         zstatus_sold_col    = select_or_auto("Sold-to pt (ZSTATUS)",   "Sold-to pt",zstatus_cols)
         zstatus_ship_col    = select_or_auto("Ship-to (ZSTATUS)",      "Ship-to",   zstatus_cols)
         zstatus_created_col = select_or_auto("Created on (ZSTATUS)",   "Created on",zstatus_cols)
 
-        # Format & categoriseer Material Number
+        # Material Number formatting & categorisatie
         df_amlog[amlog_mat_col] = df_amlog[amlog_mat_col].apply(safe_material_number)
         df_amlog["Equipment Category Group"] = df_amlog[amlog_mat_col].apply(categorize_material)
 
-        # Statistische filter
+        # Statische filter op categorieën
         category_options = ["ALLE", "SHUTTLE", "MCC", "BCC", "OTHER"]
         selected_category = st.selectbox("Filter op equipment groep", category_options)
         if selected_category != "ALLE":
-            df_amlog = df_amlog[df_amlog["Equipment Category Gr]()_]()
+            df_amlog = df_amlog[df_amlog["Equipment Category Group"] == selected_category]
+
+        if st.button("Verwerken"):
+            # Subsets
+            amlog_sel  = df_amlog[
+                [amlog_ref_col, amlog_eq_col, amlog_sn_col,
+                 amlog_mat_col, "Equipment Category Group",
+                 amlog_year_col, amlog_month_col]
+            ].copy()
+
+            export_sel = df_export[
+                [export_proj_col, export_doc_col, export_mat_col,
+                 export_sold_col, export_desc_col, export_ref_col]
+            ].drop_duplicates(subset=[export_ref_col]).copy()
+
+            zstatus_sel = df_zstatus[
+                [zstatus_projref_col, zstatus_sold_col,
+                 zstatus_ship_col, zstatus_created_col]
+            ].copy()
+
+            # Vectorized cleaning
+            for df, col in [
+                (amlog_sel, amlog_ref_col),
+                (export_sel, export_ref_col),
+                (zstatus_sel, zstatus_projref_col)
+            ]:
+                df[col] = (
+                    df[col]
+                    .astype(str)
+                    .replace(r'^(nan|None|\(Null\))$', '', regex=True)
+                    .str.replace(r'\.0$', '', regex=True)
+                    .str.strip()
+                )
+
+            # Merge 1: AM LOG + EXPORT
+            merged = pd.merge(
+                amlog_sel, export_sel,
+                left_on=amlog_ref_col, right_on=export_ref_col,
+                how="left"
+            )
+
+            # Merge 2: + ZSTATUS
+            merged["Project Reference"] = merged[export_proj_col].astype(str).str.strip()
+            zstatus_sel[zstatus_projref_col] = zstatus_sel[zstatus_projref_col].astype(str).str.strip()
+            merged = pd.merge(
+                merged, zstatus_sel,
+                left_on="Project Reference", right_on=zstatus_projref_col,
+                how="left", suffixes=("", "_zstatus")
+            )
+
+            # Bepaal datumkolom
+            cols = merged.columns.tolist()
+            date_col_name = (
+                zstatus_created_col
+                if zstatus_created_col in cols
+                else next((c for c in cols if zstatus_created_col in c), None)
+            )
+
+            # Bouw SAP-output
+            sap_output = pd.DataFrame()
+            sap_output["Equipment Number"] = ""
+            if isinstance(date_col_name, str) and date_col_name in merged:
+                merged[date_col_name] = pd.to_datetime(
+                    merged[date_col_name], errors="coerce"
+                )
+                sap_output["Date valid from"] = merged[
+                    date_col_name
+                ].dt.strftime("%d.%m.%Y")
+            else:
+                sap_output["Date valid from"] = ""
+            sap_output["Equipment category"] = "S"
+            sap_output["Description"]      = merged[export_desc_col]
+            sap_output["Sold to partner"]  = merged[zstatus_sold_col]
+            sap_output["Ship to partner"]  = merged[zstatus_ship_col]
+            sap_output["Material Number"]  = merged[export_mat_col]
+            sap_output["Serial number"]    = merged[amlog_sn_col]
+            sap_output["Begin Guarantee"]  = ""
+            sap_output["Warranty end date"]= ""
+            sap_output[
+                "Indicator, Whether Technical Object Should Inherit Warranty"
+            ] = "x"
+            sap_output["Indicator: Pass on Warranty"] = "x"
+            sap_output["Construction year"]  = merged[amlog_year_col]
+            sap_output["Construction month"] = merged[amlog_month_col]
+
+            st.success(
+                f"SAP output met {len(sap_output)} rijen klaar voor download."
+            )
+            st.dataframe(sap_output.head(100))
+
+            # Download button
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+                sap_output.to_excel(writer, index=False, sheet_name="SAP Upload")
+            st.download_button(
+                label="Download SAP-upload Excel",
+                data=buf.getvalue(),
+                file_name="sap_upload.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+    except Exception as e:
+        st.error(f"Fout bij verwerken: {e}")
+        st.text(traceback.format_exc())
+
+else:
+    st.info("Upload alle drie de bestanden om verder te gaan.")
