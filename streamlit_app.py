@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+from pathlib import Path
 
 st.set_page_config(page_title="Excel Merge Tool", layout="wide")
 st.title("Excel Merge & Filter App")
@@ -10,20 +11,16 @@ am_log_file = st.sidebar.file_uploader("Upload AM LOG file", type=["xlsx", "xls"
 zsd_file = st.sidebar.file_uploader("Upload ZSD_PO_PER_SO file", type=["xlsx", "xls"], key="zsd")
 zstatus_file = st.sidebar.file_uploader("Upload ZSTATUS file", type=["xlsx", "xls"], key="zstatus")
 
-# Equipment number filter list
-EQUIPMENT_LIST = [
-    '000000000001001917','000000000001001808','000000000001001749',
-    '000000000001001776','000000000001001911','000000000001001755',
-    '000000000001001760','000000000001001809','000000000001001747',
-    '000000000001001711','000000000001001757','000000000001001708',
-    '000000000001001770','000000000001001710','000000000001001771',
-    '000000000001001758','000000000001007905','000000000001001753',
-    '000000000001001752','000000000001008374','000000000001001805',
-    '000000000001001709','000000000001008561','000000000001008560',
-    '000000000001001765','000000000001001775','000000000001009105',
-    '000000000001001777','000000000001001742','000000000001001813',
-    '000000000001009719'
-]
+# Equipment number filter list is loaded from equipment_list.txt located
+# in the same directory as this script. The file should contain one
+# equipment number per line.
+EQUIPMENT_FILE = Path(__file__).with_name("equipment_list.txt")
+try:
+    with EQUIPMENT_FILE.open() as f:
+        EQUIPMENT_LIST = [line.strip() for line in f if line.strip()]
+except FileNotFoundError:
+    st.error(f"Equipment list file not found: {EQUIPMENT_FILE}")
+    EQUIPMENT_LIST = []
 
 def find_col(df, keyword_list):
     for kw in keyword_list:
