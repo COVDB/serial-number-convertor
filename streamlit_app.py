@@ -24,6 +24,12 @@ EQUIPMENT_LIST = [
     '000000000001001777','000000000001001742','000000000001001813',
     '000000000001009719'
 ]
+EQUIPMENT_LIST = [e.zfill(18) for e in EQUIPMENT_LIST]
+CHECK_EQUIP = '000000000010001878'
+if CHECK_EQUIP in EQUIPMENT_LIST:
+    st.sidebar.info(f"Test value {CHECK_EQUIP} found in equipment list")
+else:
+    st.sidebar.warning(f"Test value {CHECK_EQUIP} NOT found in equipment list")
 
 def find_col(df, keyword_list):
     for kw in keyword_list:
@@ -46,7 +52,7 @@ if st.sidebar.button("Run Merge"):
     zstatus_df.columns = zstatus_df.columns.str.strip()
 
     # Identify equipment column
-    equip_col = find_col(am_df, ['equipment'])
+    equip_col = find_col(am_df, ['equipment number', 'equipment'])
     if not equip_col:
         st.error("Kan kolom 'Equipment number' niet vinden in AM LOG.")
         st.write(am_df.columns.tolist())
@@ -82,7 +88,9 @@ if st.sidebar.button("Run Merge"):
     st.subheader("Filtered AM LOG")
     st.write(am_filtered.shape)
     st.dataframe(am_filtered[[equip_col, cust_ref_col]].head())
+    st.stop()
 
+    # ----- Rest of processing disabled while debugging filter -----
     # Build temp
     temp = am_filtered[[cust_ref_col, serial_col, desc_col, date_col]].copy()
     temp.columns = ['Customer Reference', 'Serial number', 'Short text for sales order item', 'Delivery Date']
@@ -114,11 +122,11 @@ if st.sidebar.button("Run Merge"):
 
     # Prepare ZSTATUS
     zs_doc = find_col(zstatus_df, ['document'])
-    zs_cols = {k: find_col(zstatus_df, [k.lower()]) for k in ['Sold-to pt','Ship-to','CoSPa','Date OKWV']}
-    if not zs_doc or any(v is None for v in zs_cols.values()):
+    zs_cols = {find_col(zstatus_df, [k.lower()]): k for k in ['Sold-to pt','Ship-to','CoSPa','Date OKWV']}
+    if not zs_doc or any(col is None for col in zs_cols.keys()):
         st.error("Ontbrekende kolommen in ZSTATUS.")
         st.stop()
-    zstatus_df = zstatus_df.rename(columns={zs_doc:'ZSD Document',**zs_cols})[['ZSD Document',*zs_cols.keys()]]
+    zstatus_df = zstatus_df.rename(columns={zs_doc:'ZSD Document', **zs_cols})[['ZSD Document', *zs_cols.values()]]
     st.subheader("ZSTATUS sample")
     st.dataframe(zstatus_df.head())
 
