@@ -63,48 +63,48 @@ if file2:
 # Verwerk wanneer beide datasets aanwezig zijn
 if df1 is not None and df2 is not None:
     # Keys standaardiseren
-df1 = df1.copy()
-df1['Customer Reference'] = df1.get('Customer Reference', pd.Series(dtype=str)).astype(str).str.strip()
-df2['Customer Reference'] = df2['Customer Reference'].astype(str).str.strip()
+    df1 = df1.copy()
+    df1['Customer Reference'] = df1.get('Customer Reference', pd.Series(dtype=str)).astype(str).str.strip()
+    df2['Customer Reference'] = df2['Customer Reference'].astype(str).str.strip()
 
     # Filter op equipment numbers
-df1['Material Number'] = df1.get('Material Number', pd.Series(dtype=str)).astype(str).str.strip()
-filtered = df1[df1['Material Number'].isin(equipment_numbers)].copy()
+    df1['Material Number'] = df1.get('Material Number', pd.Series(dtype=str)).astype(str).str.strip()
+    filtered = df1[df1['Material Number'].isin(equipment_numbers)].copy()
 
-if filtered.empty:
-    st.warning("Geen AM LOG regels voor opgegeven equipment nummers.")
-else:
-    # Bouwjaar/maand uit Delivery Date
-    if 'Delivery Date' in filtered.columns:
-        filtered['Delivery Date'] = pd.to_datetime(filtered['Delivery Date'], errors='coerce')
-        filtered['Year of construction'] = filtered['Delivery Date'].dt.year
-        filtered['Month of construction'] = filtered['Delivery Date'].dt.month
+    if filtered.empty:
+        st.warning("Geen AM LOG regels voor opgegeven equipment nummers.")
     else:
-        filtered['Year of construction'] = pd.NA
-        filtered['Month of construction'] = pd.NA
+        # Bouwjaar/maand uit Delivery Date
+        if 'Delivery Date' in filtered.columns:
+            filtered['Delivery Date'] = pd.to_datetime(filtered['Delivery Date'], errors='coerce')
+            filtered['Year of construction'] = filtered['Delivery Date'].dt.year
+            filtered['Month of construction'] = filtered['Delivery Date'].dt.month
+        else:
+            filtered['Year of construction'] = pd.NA
+            filtered['Month of construction'] = pd.NA
 
-    # Merge op Customer Reference met Document en Material
-    merged = pd.merge(
-        filtered,
-        df2[['Customer Reference', 'Document', 'Material']],
-        on='Customer Reference',
-        how='left'
-    )
+        # Merge op Customer Reference met Document en Material
+        merged = pd.merge(
+            filtered,
+            df2[['Customer Reference', 'Document', 'Material']],
+            on='Customer Reference',
+            how='left'
+        )
 
-    # Resultaat tonen en exporteren
-    cols = [c for c in get_output_columns() if c in merged.columns]
-    result = merged[cols]
-    st.success(f"Resultaat: {len(result)} regels.")
-    st.dataframe(result)
+        # Resultaat tonen en exporteren
+        cols = [c for c in get_output_columns() if c in merged.columns]
+        result = merged[cols]
+        st.success(f"Resultaat: {len(result)} regels.")
+        st.dataframe(result)
 
-    # Excel export
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        result.to_excel(writer, index=False, sheet_name='Enriched')
-    output.seek(0)
-    st.download_button(
-        "Download Excel",
-        data=output,
-        file_name="am_log_enriched.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+        # Excel export
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            result.to_excel(writer, index=False, sheet_name='Enriched')
+        output.seek(0)
+        st.download_button(
+            "Download Excel",
+            data=output,
+            file_name="am_log_enriched.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
