@@ -3,7 +3,6 @@ import pandas as pd
 from io import BytesIO
 
 st.set_page_config(page_title="Excel Merge Tool", layout="wide")
-
 st.title("Excel Merge & Filter App")
 
 # Sidebar file upload
@@ -26,26 +25,46 @@ EQUIPMENT_LIST = [
     '000000000001009719'
 ]
 
+def check_columns(df, expected, df_name):
+    missing = [col for col in expected if col not in df.columns]
+    if missing:
+        st.error(
+            f"Fout: In {df_name} ontbreken de kolommen: {', '.join(missing)}"
+        )
+        st.write(f"Beschikbare kolommen in {df_name}:")
+        st.dataframe(pd.DataFrame({'Columns': df.columns}))
+        return False
+    return True
+
 if st.sidebar.button("Run Merge"):
     if not (am_log_file and zsd_file and zstatus_file):
         st.error("Please upload all three files to proceed.")
     else:
-        # Read files
+        # Read files with stripped column names
         am_df = pd.read_excel(am_log_file, dtype=str)
+        am_df.columns = am_df.columns.str.strip()
         zsd_df = pd.read_excel(zsd_file, dtype=str)
+        zsd_df.columns = zsd_df.columns.str.strip()
         zstatus_df = pd.read_excel(zstatus_file, dtype=str)
+        zstatus_df.columns = zstatus_df.columns.str.strip()
+
+        # Validate AM LOG columns
+        am_expected = [
+            'Equipment number', 'Customer Reference', 'Serial number',
+            'Short text for sales order item', 'Delivery Date',
+            'Project Reference', 'Material'
+        ]
+        if not check_columns(am_df, am_expected, 'AM LOG'):
+            st.stop()
 
         # Step 1: Filter AM LOG
         am_filtered = am_df[am_df['Equipment number'].isin(EQUIPMENT_LIST)].copy()
 
         # Step 2: Create temporary output
         temp = am_filtered[[
-            'Customer Reference',
-            'Serial number',
-            'Short text for sales order item',
-            'Delivery Date',
-            'Project Reference',
-            'Material'
+            'Customer Reference', 'Serial number',
+            'Short text for sales order item', 'Delivery Date',
+            'Project Reference', 'Material'
         ]].copy()
 
         # Extract Year and Month
@@ -53,27 +72,39 @@ if st.sidebar.button("Run Merge"):
         temp['Year of construction'] = temp['Delivery Date'].dt.year.astype('Int64')
         temp['Month of construction'] = temp['Delivery Date'].dt.strftime('%m')
 
-        # Reorder and drop original
+        # Rename and reorder columns
         temp = temp.rename(columns={'Material': 'AM Material'})
         temp = temp[[
-            'Customer Reference',
-            'Serial number',
-            'Short text for sales order item',
-            'Year of construction',
-            'Month of construction',
-            'Project Reference',
-            'AM Material'
+            'Customer Reference', 'Serial number',
+            'Short text for sales order item', 'Year of construction',
+            'Month of construction', 'Project Reference', 'AM Material'
         ]]
 
+        # Validate ZSD_PO_PER_SO columns
+        zsd_expected = ['Purch.Doc.', 'Document', 'Material']
+        if not check_columns(zsd_df, zsd_expected, 'ZSD_PO_PER_SO'):
+            st.stop()
+        # Prepare ZSD
+        zsd_df = zsd_df.rename(columns={
+            'Purch.Doc.': 'Customer Reference',
+            'Document': 'ZSD Document',
+            'Material': 'ZSD Material'
+        })
+
         # Step 3: Merge with ZSD_PO_PER_SO
-        zsd_df = zsd_df.rename(columns={'Purch.Doc.': 'Customer Reference',
-                                        'Document': 'ZSD Document',
-                                        'Material': 'ZSD Material'})
-        merged1 = temp.merge(zsd_df[['Customer Reference', 'ZSD Document', 'ZSD Material']],
-                             on='Customer Reference', how='left')
+        merged1 = temp.merge(
+            zsd_df[['Customer Reference', 'ZSD Document', 'ZSD Material']],
+            on='Customer Reference', how='left'
+        )
+
+        # Validate ZSTATUS columns
+        zstatus_expected = ['Document', 'Sold-to pt', 'Ship-to', 'CoSPa', 'Date OKWV']
+        if not check_columns(zstatus_df, zstatus_expected, 'ZSTATUS'):
+            st.stop()
+        # Prepare ZSTATUS
+        zstatus_df = zstatus_df.rename(columns={'Document': 'ZSD Document'})
 
         # Step 4: Merge with ZSTATUS
-        zstatus_df = zstatus_df.rename(columns={'Document': 'ZSD Document'})
         final_df = merged1.merge(
             zstatus_df[['ZSD Document', 'Sold-to pt', 'Ship-to', 'CoSPa', 'Date OKWV']],
             on='ZSD Document', how='left'
@@ -83,7 +114,6 @@ if st.sidebar.button("Run Merge"):
         st.success("Merge complete!")
         st.dataframe(final_df)
 
-        # Download button
         towrite = BytesIO()
         final_df.to_excel(towrite, index=False, sheet_name='MergedData')
         towrite.seek(0)
