@@ -13,7 +13,7 @@ st.write("""
 5. Klik op **Verwerken**
 """)
 
-# 1) Upload de bestanden
+# 1) Uploader
 amlog_file   = st.file_uploader("1) AM LOG EQUIPMENT LIST (.xlsx)", type="xlsx")
 export_file  = st.file_uploader("2) Export bestand (.xlsx)",         type="xlsx")
 zstatus_file = st.file_uploader("3) ZSTATUS export (.xlsx)",         type="xlsx")
@@ -26,7 +26,7 @@ if amlog_file and export_file and zstatus_file:
         df_zstatus = pd.read_excel(zstatus_file)
         st.success("Bestanden ingelezen!")
 
-        # 3) Kolomselectie voor de keys
+        # 3) Kolomselectie
         st.subheader("Selecteer de key-kolommen")
 
         amlog_col = st.selectbox(
@@ -62,7 +62,7 @@ if amlog_file and export_file and zstatus_file:
                   if "ProjRef" in df_zstatus.columns else 0
         )
 
-        # 4) Filterlijst voor material numbers
+        # 4) Filtermaterialen
         FILTER_MATERIALS = {
             "000000000001001917","000000000001001808","000000000001001749",
             "000000000001001776","000000000001001911","000000000001001755",
@@ -84,36 +84,28 @@ if amlog_file and export_file and zstatus_file:
             ].copy()
             st.write(f"AM LOG gefilterd: {len(df_amlog)} → {len(df_amlog_f)} rijen")
 
-            # 6) Clean merge-sleutels naar strings zonder trailing .0
-            df_amlog_f[amlog_col]    = (
-                df_amlog_f[amlog_col]
-                .astype(str)
-                .str.replace(r'\.0$', '', regex=True)
-                .str.strip()
-            )
-            df_export[export_purch]   = (
-                df_export[export_purch]
-                .astype(str)
-                .str.replace(r'\.0$', '', regex=True)
-                .str.strip()
-            )
-            df_export[export_project] = (
-                df_export[export_project]
-                .astype(str)
-                .str.replace(r'\.0$', '', regex=True)
-                .str.strip()
-            )
-            df_zstatus[zstatus_projref] = (
-                df_zstatus[zstatus_projref]
-                .astype(str)
-                .str.replace(r'\.0$', '', regex=True)
-                .str.strip()
-            )
+            # 6) Clean keys naar strings zonder “.0”
+            for df, col in [
+                (df_amlog_f, amlog_col),
+                (df_export,  export_purch),
+                (df_export,  export_project),
+                (df_zstatus, zstatus_projref)
+            ]:
+                df[col] = (
+                    df[col]
+                    .astype(str)
+                    .str.replace(r'\.0$', '', regex=True)
+                    .str.strip()
+                )
 
-            # 7) Eerste merge: Customer Reference → Purch.Doc
+            # 7) Maak unieke subsets voor merge
+            export_unique  = df_export.drop_duplicates(subset=[export_purch])
+            zstatus_unique = df_zstatus.drop_duplicates(subset=[zstatus_projref])
+
+            # 8) Eerste merge: Customer Reference → Purch.Doc
             df12 = pd.merge(
                 df_amlog_f,
-                df_export,
+                export_unique,
                 left_on=amlog_col,
                 right_on=export_purch,
                 how="left",
@@ -121,10 +113,10 @@ if amlog_file and export_file and zstatus_file:
             )
             st.write(f"Na merge met EXPORT: {len(df12)} rijen")
 
-            # 8) Tweede merge: Project Reference → ProjRef
+            # 9) Tweede merge: Project Reference → ProjRef
             df123 = pd.merge(
                 df12,
-                df_zstatus,
+                zstatus_unique,
                 left_on=export_project,
                 right_on=zstatus_projref,
                 how="left",
@@ -132,7 +124,7 @@ if amlog_file and export_file and zstatus_file:
             )
             st.write(f"Na merge met ZSTATUS: {len(df123)} rijen")
 
-            # 9) Preview en download
+            # 10) Preview + download
             st.dataframe(df123.head(100))
 
             buf = io.BytesIO()
