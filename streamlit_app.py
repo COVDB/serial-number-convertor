@@ -35,87 +35,104 @@ def find_col(df, keyword_list):
 if st.sidebar.button("Run Merge"):
     if not (am_log_file and zsd_file and zstatus_file):
         st.error("Please upload all three files to proceed.")
-    else:
-        # Read files and strip column names
-        am_df = pd.read_excel(am_log_file, dtype=str)
-        am_df.columns = am_df.columns.str.strip()
-        zsd_df = pd.read_excel(zsd_file, dtype=str)
-        zsd_df.columns = zsd_df.columns.str.strip()
-        zstatus_df = pd.read_excel(zstatus_file, dtype=str)
-        zstatus_df.columns = zstatus_df.columns.str.strip()
+        st.stop()
 
-        # Show initial AM LOG head & shape
-        st.subheader("AM LOG initial")
-        st.write(am_df.shape)
-        st.dataframe(am_df.head())
+    # Load and clean
+    am_df = pd.read_excel(am_log_file, dtype=str)
+    am_df.columns = am_df.columns.str.strip()
+    zsd_df = pd.read_excel(zsd_file, dtype=str)
+    zsd_df.columns = zsd_df.columns.str.strip()
+    zstatus_df = pd.read_excel(zstatus_file, dtype=str)
+    zstatus_df.columns = zstatus_df.columns.str.strip()
 
-        # Dynamic column mapping for AM LOG
-        equip_col = find_col(am_df, ['equipment'])
-        cust_ref_col = find_col(am_df, ['customer reference', 'purch.doc', 'purch doc'])
-        serial_col = find_col(am_df, ['serial'])
-        desc_col = find_col(am_df, ['short text', 'description'])
-        date_col = find_col(am_df, ['delivery date', 'date'])
-        
-        # Debug equipment column discovery
-        st.write(f"Using '{equip_col}' as Equipment number column")
-        st.write("Sample unique equipment values:", am_df[equip_col].dropna().unique()[:10])
-        common = set(am_df[equip_col].dropna()).intersection(EQUIPMENT_LIST)
-        st.write(f"Matches found in EQUIPMENT_LIST: {len(common)} => {list(common)[:10]}")
+    # Identify equipment column
+    equip_col = find_col(am_df, ['equipment'])
+    if not equip_col:
+        st.error("Kan kolom 'Equipment number' niet vinden in AM LOG.")
+        st.write(am_df.columns.tolist())
+        st.stop()
 
-        if not all([equip_col, cust_ref_col, serial_col, desc_col, date_col]):
-            st.error("Kan niet alle vereiste kolommen in AM LOG vinden. Controleer headers.")
-            st.stop()
+    # Clean equipment values to string of digits
+    am_df[equip_col] = (
+        am_df[equip_col]
+        .astype(str)
+        .str.strip()
+        .str.replace(r"\.0$", "", regex=True)
+        .str.zfill(18)
+    )
 
-        # Filter AM LOG
-        am_filtered = am_df[am_df[equip_col].isin(EQUIPMENT_LIST)].copy()
-        st.subheader("Filtered AM LOG")
-        st.write(f"Rows after filter: {len(am_filtered)}")
-        st.dataframe(am_filtered.head())
+    # Debug cleaned equipment values
+    st.subheader("Equipment column cleaned & sample values")
+    st.write(f"Column used: '{equip_col}' with dtype {am_df[equip_col].dtype}")
+    st.write(am_df[equip_col].unique()[:10])
+    common = set(am_df[equip_col].unique()).intersection(EQUIPMENT_LIST)
+    st.write(f"Matches with EQUIPMENT_LIST: {len(common)} => {list(common)[:10]}")
 
-        # Rest of pipeline... (same as before)
-        temp = am_filtered[[cust_ref_col, serial_col, desc_col, date_col]].copy()
-        temp = temp.rename(columns={
-            cust_ref_col: 'Customer Reference',
-            serial_col: 'Serial number',
-            desc_col: 'Short text for sales order item',
-            date_col: 'Delivery Date'
-        })
-        temp['Delivery Date'] = pd.to_datetime(temp['Delivery Date'], errors='coerce')
-        temp['Year of construction'] = temp['Delivery Date'].dt.year.astype('Int64')
-        temp['Month of construction'] = temp['Delivery Date'].dt.strftime('%m')
+    # Map other AM LOG cols
+    cust_ref_col = find_col(am_df, ['customer reference', 'purch.doc', 'purch doc'])
+    serial_col = find_col(am_df, ['serial'])
+    desc_col = find_col(am_df, ['short text', 'description'])
+    date_col = find_col(am_df, ['delivery date', 'date'])
+    if not all([cust_ref_col, serial_col, desc_col, date_col]):
+        st.error("Ontbrekende kolommen in AM LOG voor verdere verwerking.")
+        st.stop()
 
-        zsd_cust = find_col(zsd_df, ['purch.doc', 'customer reference'])
-        zsd_doc = find_col(zsd_df, ['document'])
-        zsd_mat = find_col(zsd_df, ['material'])
-        zsd_proj = find_col(zsd_df, ['project reference'])
-        zsd_df = zsd_df.rename(columns={
-            zsd_cust: 'Customer Reference',
-            zsd_doc: 'ZSD Document',
-            zsd_mat: 'ZSD Material',
-            zsd_proj: 'Project Reference'
-        })[[ 'Customer Reference', 'ZSD Document', 'ZSD Material', 'Project Reference' ]]
-        merged1 = temp.merge(zsd_df, on='Customer Reference', how='left')
+    # Filter
+    am_filtered = am_df[am_df[equip_col].isin(EQUIPMENT_LIST)].copy()
+    st.subheader("Filtered AM LOG")
+    st.write(am_filtered.shape)
+    st.dataframe(am_filtered[[equip_col, cust_ref_col]].head())
 
-        zs_doc = find_col(zstatus_df, ['document'])
-        zs_cols = { 
-            'Sold-to pt': find_col(zstatus_df, ['sold-to']),
-            'Ship-to': find_col(zstatus_df, ['ship-to']),
-            'CoSPa': find_col(zstatus_df, ['cospa']),
-            'Date OKWV': find_col(zstatus_df, ['date okwv'])
-        }
-        zstatus_df = zstatus_df.rename(columns={zs_doc: 'ZSD Document', **zs_cols})
-        final_df = merged1.merge(
-            zstatus_df[['ZSD Document', *zs_cols.keys()]],
-            on='ZSD Document', how='left'
-        )
-        
-        st.success("Merge complete!")
-        buffer = BytesIO()
-        final_df.to_excel(buffer, index=False, sheet_name='MergedData')
-        buffer.seek(0)
-        st.download_button(
-            label="Download merged Excel",
-            data=buffer,
-            file_name="merged_data.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+    # Build temp
+    temp = am_filtered[[cust_ref_col, serial_col, desc_col, date_col]].copy()
+    temp.columns = ['Customer Reference', 'Serial number', 'Short text for sales order item', 'Delivery Date']
+    temp['Delivery Date'] = pd.to_datetime(temp['Delivery Date'], errors='coerce')
+    temp['Year of construction'] = temp['Delivery Date'].dt.year.astype('Int64')
+    temp['Month of construction'] = temp['Delivery Date'].dt.strftime('%m')
+    st.subheader("Temp after date parse")
+    st.dataframe(temp.head())
+
+    # Prepare ZSD
+    zsd_cust = find_col(zsd_df, ['purch.doc', 'customer reference'])
+    zsd_doc = find_col(zsd_df, ['document'])
+    zsd_mat = find_col(zsd_df, ['material'])
+    zsd_proj = find_col(zsd_df, ['project reference'])
+    if not all([zsd_cust, zsd_doc, zsd_mat, zsd_proj]):
+        st.error("Ontbrekende kolommen in ZSD_PO_PER_SO.")
+        st.stop()
+    zsd_df = zsd_df.rename(columns={
+        zsd_cust: 'Customer Reference', zsd_doc: 'ZSD Document',
+        zsd_mat: 'ZSD Material', zsd_proj: 'Project Reference'
+    })[['Customer Reference','ZSD Document','ZSD Material','Project Reference']]
+    st.subheader("ZSD sample")
+    st.dataframe(zsd_df.head())
+
+    merged1 = temp.merge(zsd_df, on='Customer Reference', how='inner')
+    st.subheader("Merged1 (inner join)")
+    st.write(merged1.shape)
+    st.dataframe(merged1.head())
+
+    # Prepare ZSTATUS
+    zs_doc = find_col(zstatus_df, ['document'])
+    zs_cols = {k: find_col(zstatus_df, [k.lower()]) for k in ['Sold-to pt','Ship-to','CoSPa','Date OKWV']}
+    if not zs_doc or any(v is None for v in zs_cols.values()):
+        st.error("Ontbrekende kolommen in ZSTATUS.")
+        st.stop()
+    zstatus_df = zstatus_df.rename(columns={zs_doc:'ZSD Document',**zs_cols})[['ZSD Document',*zs_cols.keys()]]
+    st.subheader("ZSTATUS sample")
+    st.dataframe(zstatus_df.head())
+
+    final_df = merged1.merge(zstatus_df, on='ZSD Document', how='left')
+    st.subheader("Final merged")
+    st.write(final_df.shape)
+    st.dataframe(final_df.head())
+
+    # Download
+    buffer = BytesIO()
+    final_df.to_excel(buffer, index=False, sheet_name='MergedData')
+    buffer.seek(0)
+    st.download_button("Download merged Excel", data=buffer,
+        file_name="merged_data.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
