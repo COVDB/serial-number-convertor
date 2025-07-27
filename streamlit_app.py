@@ -44,6 +44,17 @@ if st.sidebar.button("Run Merge"):
         zstatus_df = pd.read_excel(zstatus_file, dtype=str)
         zstatus_df.columns = zstatus_df.columns.str.strip()
 
+        # Debug: show initial loaded data heads and shapes
+        st.subheader("AM LOG head & shape")
+        st.write(am_df.shape)
+        st.dataframe(am_df.head())
+        st.subheader("ZSD_PO_PER_SO head & shape")
+        st.write(zsd_df.shape)
+        st.dataframe(zsd_df.head())
+        st.subheader("ZSTATUS head & shape")
+        st.write(zstatus_df.shape)
+        st.dataframe(zstatus_df.head())
+
         # Dynamic column mapping for AM LOG
         equip_col = find_col(am_df, ['equipment'])
         cust_ref_col = find_col(am_df, ['customer reference', 'purch.doc', 'purch doc'])
@@ -57,7 +68,9 @@ if st.sidebar.button("Run Merge"):
 
         # Filter AM LOG
         am_filtered = am_df[am_df[equip_col].isin(EQUIPMENT_LIST)].copy()
-        st.write(f"AM LOG gefilterd: {len(am_filtered)} rijen")
+        st.subheader("Filtered AM LOG")
+        st.write(f"Rows after filter: {len(am_filtered)}")
+        st.dataframe(am_filtered.head())
 
         # Create temp output
         temp = am_filtered[[cust_ref_col, serial_col, desc_col, date_col]].copy()
@@ -67,11 +80,16 @@ if st.sidebar.button("Run Merge"):
             desc_col: 'Short text for sales order item',
             date_col: 'Delivery Date'
         })
+        st.subheader("Temporary table (temp)")
+        st.write(temp.shape)
+        st.dataframe(temp.head())
 
         # Extract Year/Month
         temp['Delivery Date'] = pd.to_datetime(temp['Delivery Date'], errors='coerce')
         temp['Year of construction'] = temp['Delivery Date'].dt.year.astype('Int64')
         temp['Month of construction'] = temp['Delivery Date'].dt.strftime('%m')
+        st.subheader("Temp with Year & Month")
+        st.dataframe(temp[['Delivery Date','Year of construction','Month of construction']].drop_duplicates().head())
 
         # Dynamic mapping for ZSD
         zsd_cust = find_col(zsd_df, ['purch.doc', 'customer reference'])
@@ -90,9 +108,15 @@ if st.sidebar.button("Run Merge"):
             zsd_proj: 'Project Reference'
         })
         zsd_df = zsd_df[['Customer Reference', 'ZSD Document', 'ZSD Material', 'Project Reference']]
+        st.subheader("Prepared ZSD_PO_PER_SO")
+        st.write(zsd_df.shape)
+        st.dataframe(zsd_df.head())
 
         merged1 = temp.merge(zsd_df, on='Customer Reference', how='left')
-        st.write(f"Na merge ZSD: {len(merged1)} rijen, mpackage matches: {merged1['ZSD Document'].notna().sum()} ")
+        st.subheader("After merging with ZSD_PO_PER_SO")
+        st.write(merged1.shape)
+        st.write("Matches on ZSD Document:", merged1['ZSD Document'].notna().sum())
+        st.dataframe(merged1.head())
 
         # Dynamic mapping for ZSTATUS
         zs_doc = find_col(zstatus_df, ['document'])
@@ -108,13 +132,19 @@ if st.sidebar.button("Run Merge"):
             st.stop()
 
         zstatus_df = zstatus_df.rename(columns={zs_doc: 'ZSD Document', **zs_cols})
+        st.subheader("Prepared ZSTATUS")
+        st.write(zstatus_df.shape)
+        st.dataframe(zstatus_df.head())
+
         final_df = merged1.merge(
             zstatus_df[['ZSD Document', *zs_cols.keys()]],
             on='ZSD Document', how='left'
         )
+        st.subheader("Final merged dataframe")
+        st.write(final_df.shape)
+        st.dataframe(final_df.head())
 
         st.success("Merge complete!")
-        st.dataframe(final_df)
         buffer = BytesIO()
         final_df.to_excel(buffer, index=False, sheet_name='MergedData')
         buffer.seek(0)
