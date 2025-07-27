@@ -30,13 +30,33 @@ if amlog_file and export_file and zstatus_file:
         # 3) Kolomselectie voor de keys
         st.subheader("Selecteer de key-kolommen")
 
-        amlog_col        = st.selectbox("AM LOG: Customer Reference",   df_amlog.columns, index=df_amlog.columns.get_loc("Customer Reference") if "Customer Reference" in df_amlog.columns else 0)
-        amlog_mat_col    = st.selectbox("AM LOG: Material Number",      df_amlog.columns, index=df_amlog.columns.get_loc("Material Number")    if "Material Number"    in df_amlog.columns else 0)
+        amlog_col        = st.selectbox(
+            "AM LOG: Customer Reference",
+            df_amlog.columns,
+            index=df_amlog.columns.get_loc("Customer Reference") if "Customer Reference" in df_amlog.columns else 0
+        )
+        amlog_mat_col    = st.selectbox(
+            "AM LOG: Material Number",
+            df_amlog.columns,
+            index=df_amlog.columns.get_loc("Material Number")    if "Material Number"    in df_amlog.columns else 0
+        )
 
-        export_purch     = st.selectbox("EXPORT: Purch.Doc",            df_export.columns, index=df_export.columns.get_loc("Purch.Doc")            if "Purch.Doc"            in df_export.columns else 0)
-        export_project   = st.selectbox("EXPORT: Project Reference",    df_export.columns, index=df_export.columns.get_loc("Project Reference")    if "Project Reference"    in df_export.columns else 0)
+        export_purch     = st.selectbox(
+            "EXPORT: Purch.Doc",
+            df_export.columns,
+            index=df_export.columns.get_loc("Purch.Doc")            if "Purch.Doc"            in df_export.columns else 0
+        )
+        export_project   = st.selectbox(
+            "EXPORT: Project Reference",
+            df_export.columns,
+            index=df_export.columns.get_loc("Project Reference")    if "Project Reference"    in df_export.columns else 0
+        )
 
-        zstatus_projref  = st.selectbox("ZSTATUS: ProjRef",             df_zstatus.columns, index=df_zstatus.columns.get_loc("ProjRef")           if "ProjRef"           in df_zstatus.columns else 0)
+        zstatus_projref  = st.selectbox(
+            "ZSTATUS: ProjRef",
+            df_zstatus.columns,
+            index=df_zstatus.columns.get_loc("ProjRef")           if "ProjRef"           in df_zstatus.columns else 0
+        )
 
         # 4) Filterlijst voor material numbers
         FILTER_MATERIALS = {
@@ -62,42 +82,4 @@ if amlog_file and export_file and zstatus_file:
                 left_on=amlog_col,
                 right_on=export_purch,
                 how="left",
-                suffixes=("_amlog","_exp")
-            )
-            st.write(f"Na merge met EXPORT: {len(df12)} rijen")
-
-            # 7) Tweede merge: Project Reference → ProjRef
-            df123 = pd.merge(
-                df12,
-                df_zstatus,
-                left_on=export_project,
-                right_on=zstatus_projref,
-                how="left",
-                suffixes=("","_zst")
-            )
-            st.write(f"Na merge met ZSTATUS: {len(df123)} rijen")
-
-            # 8) Preview en download
-            st.dataframe(df123.head(100))
-
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-                df123.to_excel(writer, index=False, sheet_name="Merged")
-            st.download_button(
-                label="Download merged Excel",
-                data=buf.getvalue(),
-                file_name="merged_output.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-    except Exception as e:
-        st.error(f"Er ging iets mis: {e}")
-else:
-    st.info("Upload alle drie de bestanden om verder te gaan.")```
-
-**Werkwijze**  
-1. Upload alle drie de bestanden.  
-2. Selecteer in elke dropdown de kolom die jouw data bevat.  
-3. Klik op **Verwerken**.  
-4. Je ziet meteen hoeveel regels overblijven en kunt de eerste 100 bekijken.  
-5. Met de download-knop kun je het volledige samengestelde bestand ophalen.
+                su
