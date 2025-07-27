@@ -143,7 +143,6 @@ if st.sidebar.button("Run Merge"):
         file_name="merged_data.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-=======
->>>>>>> main
+
 
 
