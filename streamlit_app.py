@@ -10,13 +10,13 @@ st.write("""
 2. Upload het **Export** bestand  
 3. Upload de **ZSTATUS** export file  
 4. Selecteer in welke kolommen de keys staan  
-5. Klik op **Verwerken**
+5. Klik op **Verwerken** om alles te mergen  
 """)
 
 # 1) Uploader
-amlog_file   = st.file_uploader("1) AM LOG EQUIPMENT LIST (.xlsx)", type="xlsx")
-export_file  = st.file_uploader("2) Export bestand (.xlsx)",         type="xlsx")
-zstatus_file = st.file_uploader("3) ZSTATUS export (.xlsx)",         type="xlsx")
+amlog_file   = st.file_uploader("1) AM LOG (.xlsx)",   type="xlsx")
+export_file  = st.file_uploader("2) Export (.xlsx)",     type="xlsx")
+zstatus_file = st.file_uploader("3) ZSTATUS (.xlsx)",    type="xlsx")
 
 if amlog_file and export_file and zstatus_file:
     try:
@@ -26,106 +26,54 @@ if amlog_file and export_file and zstatus_file:
         df_zstatus = pd.read_excel(zstatus_file)
         st.success("Bestanden ingelezen!")
 
-        # 3) Kolomselectie
-        st.subheader("Selecteer de key-kolommen")
+        # 3) Kolomselectie voor de merges
+        st.subheader("Selecteer de merge‐kolommen")
 
-        amlog_col = st.selectbox(
-            "AM LOG: Customer Reference",
-            df_amlog.columns,
-            index=df_amlog.columns.get_loc("Customer Reference")
-                  if "Customer Reference" in df_amlog.columns else 0
-        )
-        amlog_mat_col = st.selectbox(
-            "AM LOG: Material Number",
-            df_amlog.columns,
-            index=df_amlog.columns.get_loc("Material Number")
-                  if "Material Number" in df_amlog.columns else 0
-        )
+        amlog_ref       = st.selectbox("AM LOG: Customer Reference", df_amlog.columns)
+        export_purch    = st.selectbox("EXPORT: Purch.Doc",           df_export.columns)
+        export_project  = st.selectbox("EXPORT: Project Reference",   df_export.columns)
+        zstatus_projref = st.selectbox("ZSTATUS: ProjRef",            df_zstatus.columns)
 
-        export_purch = st.selectbox(
-            "EXPORT: Purch.Doc",
-            df_export.columns,
-            index=df_export.columns.get_loc("Purch.Doc")
-                  if "Purch.Doc" in df_export.columns else 0
-        )
-        export_project = st.selectbox(
-            "EXPORT: Project Reference",
-            df_export.columns,
-            index=df_export.columns.get_loc("Project Reference")
-                  if "Project Reference" in df_export.columns else 0
-        )
-
-        zstatus_projref = st.selectbox(
-            "ZSTATUS: ProjRef",
-            df_zstatus.columns,
-            index=df_zstatus.columns.get_loc("ProjRef")
-                  if "ProjRef" in df_zstatus.columns else 0
-        )
-
-        # 4) Filtermaterialen
-        FILTER_MATERIALS = {
-            "000000000001001917","000000000001001808","000000000001001749",
-            "000000000001001776","000000000001001911","000000000001001755",
-            "000000000001001760","000000000001001809","000000000001001747",
-            "000000000001001711","000000000001001757","000000000001001708",
-            "000000000001001770","000000000001001710","000000000001001771",
-            "000000000001001758","000000000001007905","000000000001001753",
-            "000000000001001752","000000000001008374","000000000001001805",
-            "000000000001001709","000000000001008561","000000000001008560",
-            "000000000001001765","000000000001001775","000000000001009105",
-            "000000000001001777","000000000001001742","000000000001001813",
-            "000000000001009719"
-        }
+        # 4) Optioneel: extra kolommen uit AM LOG om later weer te geven
+        amlog_eq    = st.selectbox("AM LOG: Equipment Number", df_amlog.columns)
+        amlog_sn    = st.selectbox("AM LOG: Serial Number",    df_amlog.columns)
 
         if st.button("Verwerken"):
-            # 5) Filter AM LOG
-            df_amlog_f = df_amlog[
-                df_amlog[amlog_mat_col].astype(str).isin(FILTER_MATERIALS)
-            ].copy()
-            st.write(f"AM LOG gefilterd: {len(df_amlog)} → {len(df_amlog_f)} rijen")
+            # 5) Clean keys: zorg dat het allemaal strings zijn zonder '.0'
+            def clean_col(df, col):
+                df[col] = (df[col]
+                           .astype(str)
+                           .str.replace(r'\.0$', '', regex=True)
+                           .str.strip())
+            clean_col(df_amlog, amlog_ref)
+            clean_col(df_export, export_purch)
+            clean_col(df_export, export_project)
+            clean_col(df_zstatus, zstatus_projref)
 
-            # 6) Clean keys naar strings zonder “.0”
-            for df, col in [
-                (df_amlog_f, amlog_col),
-                (df_export,  export_purch),
-                (df_export,  export_project),
-                (df_zstatus, zstatus_projref)
-            ]:
-                df[col] = (
-                    df[col]
-                    .astype(str)
-                    .str.replace(r'\.0$', '', regex=True)
-                    .str.strip()
-                )
-
-            # 7) Maak unieke subsets voor merge
-            export_unique  = df_export.drop_duplicates(subset=[export_purch])
-            zstatus_unique = df_zstatus.drop_duplicates(subset=[zstatus_projref])
-
-            # 8) Eerste merge: Customer Reference → Purch.Doc
+            # 6) Eerste merge: AM LOG ↔ EXPORT
             df12 = pd.merge(
-                df_amlog_f,
-                export_unique,
-                left_on=amlog_col,
+                df_amlog,
+                df_export,
+                left_on=amlog_ref,
                 right_on=export_purch,
                 how="left",
-                suffixes=("_amlog", "_exp")
+                suffixes=("_amlog","_exp")
             )
-            st.write(f"Na merge met EXPORT: {len(df12)} rijen")
+            st.write(f"Na eerste merge: {len(df12)} rijen")
 
-            # 9) Tweede merge: Project Reference → ProjRef
+            # 7) Tweede merge: ↔ ZSTATUS
             df123 = pd.merge(
                 df12,
-                zstatus_unique,
+                df_zstatus,
                 left_on=export_project,
                 right_on=zstatus_projref,
                 how="left",
-                suffixes=("", "_zst")
+                suffixes=("","_zst")
             )
-            st.write(f"Na merge met ZSTATUS: {len(df123)} rijen")
+            st.write(f"Na tweede merge: {len(df123)} rijen")
 
-            # 10) Preview + download
-            st.dataframe(df123.head(100))
+            # 8) Preview en download
+            st.dataframe(df123[[amlog_ref, amlog_eq, amlog_sn, export_project]].head(100))
 
             buf = io.BytesIO()
             with pd.ExcelWriter(buf, engine="openpyxl") as writer:
