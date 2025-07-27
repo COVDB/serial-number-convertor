@@ -38,7 +38,6 @@ file1 = st.file_uploader("AM LOG (xlsx/xls)", type=["xlsx", "xls"], key='am_log'
 if file1:
     try:
         df1 = pd.read_excel(file1)
-        # Strip kolomnamen
         df1.columns = df1.columns.str.strip()
     except Exception as e:
         st.error(f"Fout bij lezen AM LOG: {e}")
@@ -51,7 +50,6 @@ if file2:
     try:
         df2 = pd.read_excel(file2)
         df2.columns = df2.columns.str.strip()
-        # Rename merge-key
         if 'Purch.Doc.' in df2.columns:
             df2 = df2.rename(columns={'Purch.Doc.': 'Customer Reference'})
         else:
@@ -59,21 +57,22 @@ if file2:
     except Exception as e:
         st.error(f"Fout bij lezen ZSD_PO_PER_SO: {e}")
 
-# Verwerk wanneer beide bestanden klaar zijn
+# Verwerk wanneer beide datasets aanwezig zijn
 if df1 is not None and df2 is not None:
-    # Standaardiseer merge-key types en strip waarden
+    # Keys standaardiseren
     df1 = df1.copy()
+    df1.columns = df1.columns.str.strip()
     df1['Customer Reference'] = df1.get('Customer Reference', pd.Series(dtype=str)).astype(str).str.strip()
     df2['Customer Reference'] = df2['Customer Reference'].astype(str).str.strip()
 
-    # Filter op materiaalnummer
+    # Filter op equipment numbers
     df1['Material Number'] = df1.get('Material Number', pd.Series(dtype=str)).astype(str).str.strip()
     filtered = df1[df1['Material Number'].isin(equipment_numbers)].copy()
 
     if filtered.empty:
         st.warning("Geen AM LOG regels voor opgegeven equipment nummers.")
     else:
-        # Bouwjaar en maand
+        # Bouwjaar/maand uit Delivery Date
         if 'Delivery Date' in filtered.columns:
             filtered['Delivery Date'] = pd.to_datetime(filtered['Delivery Date'], errors='coerce')
             filtered['Year of construction'] = filtered['Delivery Date'].dt.year
@@ -83,15 +82,23 @@ if df1 is not None and df2 is not None:
             filtered['Month of construction'] = pd.NA
             st.warning("Geen 'Delivery Date' kolom; bouwjaar/maand leeg.")
 
-        # Merge\merged
+        # Merge met indicator om join-status te tonen
         merged = pd.merge(
             filtered,
             df2[['Customer Reference', 'Project Reference', 'Material']],
             on='Customer Reference',
-            how='left'
+            how='left',
+            indicator=True
         )
+        # Toon join status
+        st.write("Merge status:", merged['_merge'].value_counts())
 
-        # Toon en export
+        # Filter op succesvolle matches voor weergave/debug
+        matched = merged[merged['_merge'] == 'both']
+        if matched.empty:
+            st.error("Geen overeenkomende Customer Reference in ZSD_PO_PER_SO.")
+
+        # Resultaat
         cols = [c for c in get_output_columns() if c in merged.columns]
         result = merged[cols]
         st.success(f"Resultaat: {len(result)} regels.")
@@ -102,7 +109,8 @@ if df1 is not None and df2 is not None:
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             result.to_excel(writer, index=False, sheet_name='Enriched')
         output.seek(0)
-        st.download_button("Download Excel", data=output,
-                           file_name="am_log_enriched.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
+        st.download_button(
+            "Download Excel", data=output,
+            file_name="am_log_enriched.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
