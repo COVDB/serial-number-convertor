@@ -2,102 +2,105 @@ import streamlit as st
 import pandas as pd
 import io
 
-st.set_page_config(page_title="Serial Number Merger", layout="centered")
-st.title("Serial Number Merger")
+# Lijst met equipment nummers om te filteren
+EQUIPMENT_NUMBERS = [
+    '000000000001001917', '000000000001001808', '000000000001001749',
+    '000000000001001776', '000000000001001911', '000000000001001755',
+    '000000000001001760', '000000000001001809', '000000000001001747',
+    '000000000001001711', '000000000001001757', '000000000001001708',
+    '000000000001001770', '000000000001001710', '000000000001001771',
+    '000000000001001758', '000000000001007905', '000000000001001753',
+    '000000000001001752', '000000000001008374', '000000000001001805',
+    '000000000001001709', '000000000001008561', '000000000001008560',
+    '000000000001001765', '000000000001001775', '000000000001009105',
+    '000000000001001777', '000000000001001742', '000000000001001813',
+    '000000000001009719'
+]
 
-st.write("""
-1. Upload het **AM LOG EQUIPMENT LIST** bestand  
-2. Upload het **Export** bestand  
-3. Upload de **ZSTATUS** export file  
-4. Selecteer in welke kolommen de keys staan  
-5. Klik op 'Verwerken'
-""")
+# Kolommen die we willen behouden in de output
+OUTPUT_COLUMNS = [
+    'Customer Reference',
+    'Serial number',
+    'Short text for sales order item',
+    'Year of construction',
+    'Month of construction',
+    'Project Reference',  # vanuit tweede bestand
+    'Material'            # vanuit tweede bestand
+]
 
-# 1) Upload de bestanden
-amlog_file   = st.file_uploader("1) AM LOG EQUIPMENT LIST (.xlsx)",   type="xlsx")
-export_file  = st.file_uploader("2) Export bestand (.xlsx)",           type="xlsx")
-zstatus_file = st.file_uploader("3) ZSTATUS export (.xlsx)",           type="xlsx")
+st.title("AM LOG Equipment Filter and Enrichment")
 
-if amlog_file and export_file and zstatus_file:
+# Eerste bestand upload (AM LOG)
+st.header("1. Upload AM LOG Excel file")
+df1 = None
+file1 = st.file_uploader("Upload AM LOG (AM LOG)", type=["xlsx", "xls"], key='am_log')
+if file1 is not None:
     try:
-        # 2) Inlezen
-        df_amlog   = pd.read_excel(amlog_file)
-        df_export  = pd.read_excel(export_file)
-        df_zstatus = pd.read_excel(zstatus_file)
-
-        st.success("Bestanden ingelezen!")
-
-        # 3) Kolomselectie voor de keys
-        st.subheader("Selecteer de key-kolommen")
-
-        amlog_col        = st.selectbox("AM LOG: Customer Reference",   df_amlog.columns, index=df_amlog.columns.get_loc("Customer Reference") if "Customer Reference" in df_amlog.columns else 0)
-        amlog_mat_col    = st.selectbox("AM LOG: Material Number",      df_amlog.columns, index=df_amlog.columns.get_loc("Material Number")    if "Material Number"    in df_amlog.columns else 0)
-
-        export_purch     = st.selectbox("EXPORT: Purch.Doc",            df_export.columns, index=df_export.columns.get_loc("Purch.Doc")            if "Purch.Doc"            in df_export.columns else 0)
-        export_project   = st.selectbox("EXPORT: Project Reference",    df_export.columns, index=df_export.columns.get_loc("Project Reference")    if "Project Reference"    in df_export.columns else 0)
-
-        zstatus_projref  = st.selectbox("ZSTATUS: ProjRef",             df_zstatus.columns, index=df_zstatus.columns.get_loc("ProjRef")           if "ProjRef"           in df_zstatus.columns else 0)
-
-        # 4) Filterlijst voor material numbers
-        FILTER_MATERIALS = {
-            "000000000001001917","000000000001001808","000000000001001749","000000000001001776",
-            "000000000001001911","000000000001001755","000000000001001760","000000000001001809",
-            "000000000001001747","000000000001001711","000000000001001757","000000000001001708",
-            "000000000001001770","000000000001001710","000000000001001771","000000000001001758",
-            "000000000001007905","000000000001001753","000000000001001752","000000000001008374",
-            "000000000001001805","000000000001001709","000000000001008561","000000000001008560",
-            "000000000001001765","000000000001001775","000000000001009105","000000000001001777",
-            "000000000001001742","000000000001001813","000000000001009719"
-        }
-
-        if st.button("Verwerken"):
-            # 5) Filter AM LOG
-            df_amlog_f = df_amlog[df_amlog[amlog_mat_col].astype(str).isin(FILTER_MATERIALS)].copy()
-            st.write(f"AM LOG gefilterd: {len(df_amlog)} → {len(df_amlog_f)} rijen")
-
-            # 6) Eerste merge: Customer Reference → Purch.Doc
-            df12 = pd.merge(
-                df_amlog_f,
-                df_export,
-                left_on=amlog_col,
-                right_on=export_purch,
-                how="left",
-                suffixes=("_amlog","_exp")
-            )
-            st.write(f"Na merge met EXPORT: {len(df12)} rijen")
-
-            # 7) Tweede merge: Project Reference → ProjRef
-            df123 = pd.merge(
-                df12,
-                df_zstatus,
-                left_on=export_project,
-                right_on=zstatus_projref,
-                how="left",
-                suffixes=("","_zst")
-            )
-            st.write(f"Na merge met ZSTATUS: {len(df123)} rijen")
-
-            # 8) Preview en download
-            st.dataframe(df123.head(100))
-
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-                df123.to_excel(writer, index=False, sheet_name="Merged")
-            st.download_button(
-                label="Download merged Excel",
-                data=buf.getvalue(),
-                file_name="merged_output.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
+        df1 = pd.read_excel(file1)
     except Exception as e:
-        st.error(f"Er ging iets mis: {e}")
-else:
-    st.info("Upload alle drie de bestanden om verder te gaan.")```
+        st.error(f"Fout bij het lezen van AM LOG: {e}")
 
-**Werkwijze**  
-1. Upload alle drie de bestanden.  
-2. Selecteer in elke dropdown de kolom die jouw data bevat.  
-3. Klik op **Verwerken**.  
-4. Je ziet meteen hoeveel regels overblijven en kunt de eerste 100 bekijken.  
-5. Met de download-knop kun je het volledige samengestelde bestand ophalen.
+# Tweede bestand upload (ZSD_PO_PER_SO)
+st.header("2. Upload ZSD_PO_PER_SO Excel file")
+df2 = None
+file2 = st.file_uploader("Upload ZSD_PO_PER_SO", type=["xlsx", "xls"], key='zsd')
+if file2 is not None:
+    try:
+        df2 = pd.read_excel(file2)
+    except Exception as e:
+        st.error(f"Fout bij het lezen van ZSD_PO_PER_SO: {e}")
+
+# Verwerk enkel als beide bestanden aanwezig zijn
+if df1 is not None and df2 is not None:
+    # Basis filtering op materiaalnummer
+    df1['Material Number'] = df1['Material Number'].astype(str)
+    filtered = df1[df1['Material Number'].isin(EQUIPMENT_NUMBERS)].copy()
+
+    if filtered.empty:
+        st.warning("Geen overeenkomende regels in AM LOG voor de opgegeven equipment nummers.")
+    else:
+        # Extract Year and Month from Delivery Date
+        if 'Delivery Date' in filtered.columns:
+            filtered['Delivery Date'] = pd.to_datetime(filtered['Delivery Date'], errors='coerce')
+            filtered['Year of construction'] = filtered['Delivery Date'].dt.year.astype('Int64')
+            filtered['Month of construction'] = filtered['Delivery Date'].dt.month.astype('Int64')
+        else:
+            st.warning("Kolom 'Delivery Date' ontbreekt; geen bouwjaar/maand.")
+            filtered['Year of construction'] = pd.NA
+            filtered['Month of construction'] = pd.NA
+
+        # Merge met tweede bestand op Customer Reference = Purch.Doc.
+        if 'Customer Reference' in filtered.columns and 'Purch.Doc.' in df2.columns:
+            merged = pd.merge(
+                filtered,
+                df2[['Purch.Doc.', 'Project Reference', 'Material']],
+                how='left',
+                left_on='Customer Reference',
+                right_on='Purch.Doc.'
+            )
+        else:
+            st.error("Kan niet mergen: controleer of 'Customer Reference' en 'Purch.Doc.' kolommen aanwezig zijn.")
+            merged = filtered
+
+        # Alleen benodigde kolommen tonen en downloaden
+        available = [col for col in OUTPUT_COLUMNS if col in merged.columns]
+        missing = set(OUTPUT_COLUMNS) - set(available)
+        if missing:
+            st.warning(f"Ontbrekende kolommen en niet getoond: {', '.join(missing)}")
+
+        result = merged[available]
+        st.success(f"Resultaat: {len(result)} regels.")
+        st.dataframe(result)
+
+        # Excel export in-memory\ n        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            result.to_excel(writer, index=False, sheet_name='Enriched')
+        output.seek(0)
+
+        st.download_button(
+            label="Download resultaat als Excel",
+            data=output,
+            file_name="am_log_enriched.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
