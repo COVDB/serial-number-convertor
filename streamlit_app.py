@@ -44,16 +44,10 @@ if st.sidebar.button("Run Merge"):
         zstatus_df = pd.read_excel(zstatus_file, dtype=str)
         zstatus_df.columns = zstatus_df.columns.str.strip()
 
-        # Debug: show initial loaded data heads and shapes
-        st.subheader("AM LOG head & shape")
+        # Show initial AM LOG head & shape
+        st.subheader("AM LOG initial")
         st.write(am_df.shape)
         st.dataframe(am_df.head())
-        st.subheader("ZSD_PO_PER_SO head & shape")
-        st.write(zsd_df.shape)
-        st.dataframe(zsd_df.head())
-        st.subheader("ZSTATUS head & shape")
-        st.write(zstatus_df.shape)
-        st.dataframe(zstatus_df.head())
 
         # Dynamic column mapping for AM LOG
         equip_col = find_col(am_df, ['equipment'])
@@ -61,9 +55,15 @@ if st.sidebar.button("Run Merge"):
         serial_col = find_col(am_df, ['serial'])
         desc_col = find_col(am_df, ['short text', 'description'])
         date_col = find_col(am_df, ['delivery date', 'date'])
+        
+        # Debug equipment column discovery
+        st.write(f"Using '{equip_col}' as Equipment number column")
+        st.write("Sample unique equipment values:", am_df[equip_col].dropna().unique()[:10])
+        common = set(am_df[equip_col].dropna()).intersection(EQUIPMENT_LIST)
+        st.write(f"Matches found in EQUIPMENT_LIST: {len(common)} => {list(common)[:10]}")
+
         if not all([equip_col, cust_ref_col, serial_col, desc_col, date_col]):
             st.error("Kan niet alle vereiste kolommen in AM LOG vinden. Controleer headers.")
-            st.write(am_df.columns.tolist())
             st.stop()
 
         # Filter AM LOG
@@ -72,7 +72,7 @@ if st.sidebar.button("Run Merge"):
         st.write(f"Rows after filter: {len(am_filtered)}")
         st.dataframe(am_filtered.head())
 
-        # Create temp output
+        # Rest of pipeline... (same as before)
         temp = am_filtered[[cust_ref_col, serial_col, desc_col, date_col]].copy()
         temp = temp.rename(columns={
             cust_ref_col: 'Customer Reference',
@@ -80,45 +80,22 @@ if st.sidebar.button("Run Merge"):
             desc_col: 'Short text for sales order item',
             date_col: 'Delivery Date'
         })
-        st.subheader("Temporary table (temp)")
-        st.write(temp.shape)
-        st.dataframe(temp.head())
-
-        # Extract Year/Month
         temp['Delivery Date'] = pd.to_datetime(temp['Delivery Date'], errors='coerce')
         temp['Year of construction'] = temp['Delivery Date'].dt.year.astype('Int64')
         temp['Month of construction'] = temp['Delivery Date'].dt.strftime('%m')
-        st.subheader("Temp with Year & Month")
-        st.dataframe(temp[['Delivery Date','Year of construction','Month of construction']].drop_duplicates().head())
 
-        # Dynamic mapping for ZSD
         zsd_cust = find_col(zsd_df, ['purch.doc', 'customer reference'])
         zsd_doc = find_col(zsd_df, ['document'])
         zsd_mat = find_col(zsd_df, ['material'])
         zsd_proj = find_col(zsd_df, ['project reference'])
-        if not all([zsd_cust, zsd_doc, zsd_mat, zsd_proj]):
-            st.error("Kan niet alle vereiste kolommen in ZSD_PO_PER_SO vinden. Controleer headers.")
-            st.write(zsd_df.columns.tolist())
-            st.stop()
-
         zsd_df = zsd_df.rename(columns={
             zsd_cust: 'Customer Reference',
             zsd_doc: 'ZSD Document',
             zsd_mat: 'ZSD Material',
             zsd_proj: 'Project Reference'
-        })
-        zsd_df = zsd_df[['Customer Reference', 'ZSD Document', 'ZSD Material', 'Project Reference']]
-        st.subheader("Prepared ZSD_PO_PER_SO")
-        st.write(zsd_df.shape)
-        st.dataframe(zsd_df.head())
-
+        })[[ 'Customer Reference', 'ZSD Document', 'ZSD Material', 'Project Reference' ]]
         merged1 = temp.merge(zsd_df, on='Customer Reference', how='left')
-        st.subheader("After merging with ZSD_PO_PER_SO")
-        st.write(merged1.shape)
-        st.write("Matches on ZSD Document:", merged1['ZSD Document'].notna().sum())
-        st.dataframe(merged1.head())
 
-        # Dynamic mapping for ZSTATUS
         zs_doc = find_col(zstatus_df, ['document'])
         zs_cols = { 
             'Sold-to pt': find_col(zstatus_df, ['sold-to']),
@@ -126,24 +103,12 @@ if st.sidebar.button("Run Merge"):
             'CoSPa': find_col(zstatus_df, ['cospa']),
             'Date OKWV': find_col(zstatus_df, ['date okwv'])
         }
-        if not zs_doc or any(v is None for v in zs_cols.values()):
-            st.error("Kan niet alle vereiste kolommen in ZSTATUS vinden. Controleer headers.")
-            st.write(zstatus_df.columns.tolist())
-            st.stop()
-
         zstatus_df = zstatus_df.rename(columns={zs_doc: 'ZSD Document', **zs_cols})
-        st.subheader("Prepared ZSTATUS")
-        st.write(zstatus_df.shape)
-        st.dataframe(zstatus_df.head())
-
         final_df = merged1.merge(
             zstatus_df[['ZSD Document', *zs_cols.keys()]],
             on='ZSD Document', how='left'
         )
-        st.subheader("Final merged dataframe")
-        st.write(final_df.shape)
-        st.dataframe(final_df.head())
-
+        
         st.success("Merge complete!")
         buffer = BytesIO()
         final_df.to_excel(buffer, index=False, sheet_name='MergedData')
