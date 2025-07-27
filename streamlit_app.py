@@ -1,4 +1,3 @@
-<<<<<<< a7xfad-codex/find-and-fix-a-bug-in-codebase
 import streamlit as st
 import pandas as pd
 from io import BytesIO
