@@ -25,7 +25,7 @@ def get_output_columns():
         'Short text for sales order item',
         'Year of construction',
         'Month of construction',
-        'Document',
+        'Project Reference',
         'Material'
     ]
 
@@ -62,15 +62,15 @@ if file2:
 
 # Verwerk wanneer beide datasets aanwezig zijn
 if df1 is not None and df2 is not None:
-    # Keys standaardiseren
+    # Standaardiseer keys
     df1 = df1.copy()
+    df1.columns = df1.columns.str.strip()
     df1['Customer Reference'] = df1.get('Customer Reference', pd.Series(dtype=str)).astype(str).str.strip()
+    df1['Material Number'] = df1.get('Material Number', pd.Series(dtype=str)).astype(str).str.strip()
     df2['Customer Reference'] = df2['Customer Reference'].astype(str).str.strip()
 
     # Filter op equipment numbers
-    df1['Material Number'] = df1.get('Material Number', pd.Series(dtype=str)).astype(str).str.strip()
     filtered = df1[df1['Material Number'].isin(equipment_numbers)].copy()
-
     if filtered.empty:
         st.warning("Geen AM LOG regels voor opgegeven equipment nummers.")
     else:
@@ -83,21 +83,21 @@ if df1 is not None and df2 is not None:
             filtered['Year of construction'] = pd.NA
             filtered['Month of construction'] = pd.NA
 
-        # Merge op Customer Reference met Document en Material
+        # Merge op Customer Reference en haal Project Reference en Material
         merged = pd.merge(
             filtered,
-            df2[['Customer Reference', 'Document', 'Material']],
+            df2[['Customer Reference', 'Project Reference', 'Material']],
             on='Customer Reference',
             how='left'
         )
 
-        # Resultaat tonen en exporteren
+        # Toon resultaat en exporteren
         cols = [c for c in get_output_columns() if c in merged.columns]
         result = merged[cols]
         st.success(f"Resultaat: {len(result)} regels.")
         st.dataframe(result)
 
-        # Excel export
+        # Exporteer naar Excel
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             result.to_excel(writer, index=False, sheet_name='Enriched')
