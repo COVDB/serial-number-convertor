@@ -111,11 +111,11 @@ if st.sidebar.button("Run Merge"):
 
     # Prepare ZSTATUS
     zs_doc = find_col(zstatus_df, ['document'])
-    zs_cols = {k: find_col(zstatus_df, [k.lower()]) for k in ['Sold-to pt','Ship-to','CoSPa','Date OKWV']}
-    if not zs_doc or any(v is None for v in zs_cols.values()):
+    zs_cols = {find_col(zstatus_df, [k.lower()]): k for k in ['Sold-to pt','Ship-to','CoSPa','Date OKWV']}
+    if not zs_doc or any(col is None for col in zs_cols.keys()):
         st.error("Ontbrekende kolommen in ZSTATUS.")
         st.stop()
-    zstatus_df = zstatus_df.rename(columns={zs_doc:'ZSD Document',**zs_cols})[['ZSD Document',*zs_cols.keys()]]
+    zstatus_df = zstatus_df.rename(columns={zs_doc:'ZSD Document', **zs_cols})[['ZSD Document', *zs_cols.values()]]
     st.subheader("ZSTATUS sample")
     st.dataframe(zstatus_df.head())
 
