@@ -17,7 +17,7 @@ equipment_numbers = [
     '000000000001009719'
 ]
 
-# Output kolommen
+# Definieer output kolommen
 def get_output_columns():
     return [
         'Customer Reference',
@@ -52,127 +52,72 @@ if file2:
         df2 = pd.read_excel(file2)
         df2.columns = df2.columns.str.strip()
         st.write("ZSD_PO_PER_SO preview:", df2.head())
-        # Rename Purch.Doc or Purch.Doc. to Customer Reference for merge
+        # Rename Purch.Doc(s) to Customer Reference
         if 'Purch.Doc.' in df2.columns:
             df2 = df2.rename(columns={'Purch.Doc.': 'Customer Reference'})
         elif 'Purch.Doc' in df2.columns:
             df2 = df2.rename(columns={'Purch.Doc': 'Customer Reference'})
         else:
-            st.error("Kolom 'Purch.Doc.' of 'Purch.Doc' niet gevonden in ZSD_PO_PER_SO. Kan niet linken.")
-        # Ensure key and target columns are string
+            st.error("Kolom 'Purch.Doc.' of 'Purch.Doc' niet gevonden in ZSD_PO_PER_SO.")
+        # Strip key
         df2['Customer Reference'] = df2['Customer Reference'].astype(str).str.strip()
-        df2['Project Reference'] = df2['Project Reference'].astype(str).str.strip()
-        df2['Material'] = df2['Material'].astype(str).str.strip()
     except Exception as e:
         st.error(f"Fout bij lezen ZSD_PO_PER_SO: {e}")
 
-# Verwerk wanneer beide datasets aanwezig zijn
+# 3. Verwerk beide bestanden
 if df1 is not None and df2 is not None:
-    # Standaardiseer AM LOG
+    # Strip en standaardiseer
     df1 = df1.copy()
+    df1.columns = df1.columns.str.strip()
     df1['Customer Reference'] = df1.get('Customer Reference', pd.Series(dtype=str)).astype(str).str.strip()
     df1['Material Number'] = df1.get('Material Number', pd.Series(dtype=str)).astype(str).str.strip()
 
     # Filter op equipment numbers
-    filtered = df1[df1['Material Number'].isin(equipment_numbers)].copy()
-    if filtered.empty:
-        st.warning("Geen AM LOG regels voor opgegeven equipment nummers.")
+df_filtered = df1[df1['Material Number'].isin(equipment_numbers)].copy()
+if df1 is not None and df2 is not None:
+    if df_filtered.empty:
+        st.warning("Geen AM LOG regels voor de opgegeven equipment nummers.")
     else:
-        # Bouwjaar/maand uit Delivery Date
-        if 'Delivery Date' in filtered.columns:
-            filtered['Delivery Date'] = pd.to_datetime(filtered['Delivery Date'], errors='coerce')
-            filtered['Year of construction'] = filtered['Delivery Date'].dt.year
-            filtered['Month of construction'] = filtered['Delivery Date'].dt.month
+        # Extract jaar/maand uit Delivery Date
+        if 'Delivery Date' in df_filtered.columns:
+            df_filtered['Delivery Date'] = pd.to_datetime(df_filtered['Delivery Date'], errors='coerce')
+            df_filtered['Year of construction'] = df_filtered['Delivery Date'].dt.year
+            df_filtered['Month of construction'] = df_filtered['Delivery Date'].dt.month
         else:
-            filtered['Year of construction'] = pd.NA
-            filtered['Month of construction'] = pd.NA
+            df_filtered['Year of construction'] = pd.NA
+            df_filtered['Month of construction'] = pd.NA
 
-        # Merge op Customer Reference (AM LOG) met Customer Reference (ZSD)
+        # Merge met ZSD
         merged = pd.merge(
-            filtered,
+            df_filtered,
             df2[['Customer Reference', 'Project Reference', 'Material']],
             on='Customer Reference',
             how='left',
             indicator=True
         )
-        # Toon merge status
         st.write("Merge status:", merged['_merge'].value_counts())
 
-        # Toon enkele matched records
-        matched = merged[merged['_merge'] == 'both']
+        matched = merged[merged['_merge']=='both']
         if not matched.empty:
-            st.write("Enkele matched records:", matched[['Customer Reference','Project Reference','Material']].head())
+            st.write("Sample matches:", matched[['Customer Reference','Project Reference','Material']].head())
         else:
-            st.error("Geen overeenkomende Customer References gevonden tussen AM LOG en ZSD_PO_PER_SO.")
+            st.error("Geen overeenkomstige Customer References gevonden.")
 
-        # Selecteer en toon output kolommen
+        # Selectie output en weergave
         cols = [c for c in get_output_columns() if c in merged.columns]
         result = merged[cols]
         st.success(f"Resultaat: {len(result)} regels.")
         st.dataframe(result)
 
-        # Exporteer naar Excel
+        # Download
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             result.to_excel(writer, index=False, sheet_name='Enriched')
         output.seek(0)
         st.download_button(
-            "Download Excel", data=output,
+            label="Download resultaat als Excel",
+            data=output,
             file_name="am_log_enriched.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-if df1 is not None and df2 is not None:
-    # Standaardiseer AM LOG
-    df1 = df1.copy()
-    df1['Customer Reference'] = df1.get('Customer Reference', pd.Series(dtype=str)).astype(str).str.strip()
-    df1['Material Number'] = df1.get('Material Number', pd.Series(dtype=str)).astype(str).str.strip()
-
-    # Filter op equipment numbers
-    filtered = df1[df1['Material Number'].isin(equipment_numbers)].copy()
-    if filtered.empty:
-        st.warning("Geen AM LOG regels voor opgegeven equipment nummers.")
-    else:
-        # Bouwjaar/maand uit Delivery Date
-        if 'Delivery Date' in filtered.columns:
-            filtered['Delivery Date'] = pd.to_datetime(filtered['Delivery Date'], errors='coerce')
-            filtered['Year of construction'] = filtered['Delivery Date'].dt.year
-            filtered['Month of construction'] = filtered['Delivery Date'].dt.month
-        else:
-            filtered['Year of construction'] = pd.NA
-            filtered['Month of construction'] = pd.NA
-
-        # Merge op Customer Reference (AM LOG) met Document (ZSD)
-        merged = pd.merge(
-            filtered,
-            df2[['Document', 'Project Reference', 'Material']],
-            left_on='Customer Reference',
-            right_on='Document',
-            how='left',
-            indicator=True
-        )
-        # Toon merge status
-        st.write("Merge status:", merged['_merge'].value_counts())
-
-        # Check matched
-        matched = merged[merged['_merge'] == 'both']
-        if not matched.empty:
-            st.write("Enkele matched records:", matched[['Customer Reference','Document','Project Reference','Material']].head())
-        else:
-            st.error("Geen overeenkomende nummers gevonden tussen Customer Reference en Document.")
-
-        # Selecteer en toon output kolommen
-        cols = [c for c in get_output_columns() if c in merged.columns]
-        result = merged[cols]
-        st.success(f"Resultaat: {len(result)} regels.")
-        st.dataframe(result)
-
-        # Exporteer naar Excel
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            result.to_excel(writer, index=False, sheet_name='Enriched')
-        output.seek(0)
-        st.download_button(
-            "Download Excel", data=output,
-            file_name="am_log_enriched.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key='download'
         )
