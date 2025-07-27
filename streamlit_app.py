@@ -25,7 +25,7 @@ def get_output_columns():
         'Short text for sales order item',
         'Year of construction',
         'Month of construction',
-        'Document',
+        'Project Reference',
         'Material'
     ]
 
@@ -51,16 +51,7 @@ if file2:
     try:
         df2 = pd.read_excel(file2)
         df2.columns = df2.columns.str.strip()
-        # Toon preview
         st.write("ZSD_PO_PER_SO preview:", df2.head())
-        # Rename Purch.Doc(s) to Customer Reference
-        if 'Purch.Doc.' in df2.columns:
-            df2 = df2.rename(columns={'Purch.Doc.': 'Customer Reference'})
-        elif 'Purch.Doc' in df2.columns:
-            df2 = df2.rename(columns={'Purch.Doc': 'Customer Reference'})
-        else:
-            st.error("Kolom 'Purch.Doc.' of 'Purch.Doc' niet gevonden in ZSD_PO_PER_SO")
-        st.write("ZSD_PO_PER_SO keys:", df2[['Customer Reference', 'Document' if 'Document' in df2.columns else df2.columns[0], 'Material']].head())
     except Exception as e:
         st.error(f"Fout bij lezen ZSD_PO_PER_SO: {e}")
 
@@ -68,9 +59,12 @@ if file2:
 if df1 is not None and df2 is not None:
     # Standaardiseer keys
     df1 = df1.copy()
+    # Prepare AM LOG
     df1['Customer Reference'] = df1.get('Customer Reference', pd.Series(dtype=str)).astype(str).str.strip()
     df1['Material Number'] = df1.get('Material Number', pd.Series(dtype=str)).astype(str).str.strip()
-    df2['Customer Reference'] = df2['Customer Reference'].astype(str).str.strip()
+    # Prepare ZSD
+    df2 = df2.copy()
+    df2['Document'] = df2['Document'].astype(str).str.strip()
 
     # Filter op equipment numbers
     filtered = df1[df1['Material Number'].isin(equipment_numbers)].copy()
@@ -86,25 +80,26 @@ if df1 is not None and df2 is not None:
             filtered['Year of construction'] = pd.NA
             filtered['Month of construction'] = pd.NA
 
-        # Merge op Customer Reference en haal Document en Material
+        # Merge op Customer Reference (AM LOG) met Document (ZSD)
         merged = pd.merge(
             filtered,
-            df2[['Customer Reference', 'Document', 'Material']],
-            on='Customer Reference',
+            df2[['Document', 'Project Reference', 'Material']],
+            left_on='Customer Reference',
+            right_on='Document',
             how='left',
             indicator=True
         )
         # Toon merge indicator
         st.write("Merge status:", merged['_merge'].value_counts())
 
-        # Toon paar matched records
-        matched = merged[merged['_merge'] == 'both']
-        if not matched.empty:
-            st.write("Enkele matched records:", matched[['Customer Reference', 'Document', 'Material']].head())
+        # Toon enkele matched records
+        both = merged[merged['_merge'] == 'both']
+        if not both.empty:
+            st.write("Enkele matched records:", both[['Customer Reference', 'Document', 'Project Reference', 'Material']].head())
         else:
-            st.error("Geen overeenkomende Customer References gevonden tussen AM LOG en ZSD_PO_PER_SO.")
+            st.error("Geen overeenkomende nummers gevonden tussen Customer Reference en Document.")
 
-        # Toon resultaat en exporteren
+        # Selecteer en toon output kolommen
         cols = [c for c in get_output_columns() if c in merged.columns]
         result = merged[cols]
         st.success(f"Resultaat: {len(result)} regels.")
