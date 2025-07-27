@@ -15,7 +15,6 @@ st.write("""
 6. Klik op 'Verwerken'
 """)
 
-# --- Materiaalgroepen bovenin ---
 SHUTTLE_CODES = [
     "000000000001001917","000000000001001808","000000000001001749","000000000001001776",
     "000000000001001911","000000000001001755","000000000001001760","000000000001001809",
@@ -25,7 +24,8 @@ SHUTTLE_CODES = [
     "000000000001001795","000000000001001845","000000000001001752","000000000001008374",
     "000000000001001805","000000000001001709","000000000001008560","000000000001001765",
     "000000000001001775","000000000001008561","000000000001009105","000000000001001777",
-    "000000000001001742","000000000001001813","000000000001009719"
+    "000000000001001742","000000000001001813","000000000001009719","000000000010005396",
+    "000000000010003687","000000000010005397"
 ]
 
 BCC_CODES = [
@@ -44,23 +44,20 @@ MCC_CODES = [
     "000000000001008576","000000000001008253","000000000001009225","000000000001009454"
 ]
 
-def safe_material_number(x):
-    try:
-        if pd.isnull(x) or str(x).strip().lower() in ["", "null", "(null)"]:
-            return ""
-        return str(int(float(x))).zfill(18)
-    except:
-        return ""
-
 def categorize_material(mat_num):
+    s = str(mat_num).zfill(18)
+    if s in SHUTTLE_CODES:
     if mat_num in SHUTTLE_CODES:
         return "SHUTTLE"
+    elif s in MCC_CODES:
     elif mat_num in MCC_CODES:
         return "MCC"
+    elif s in BCC_CODES:
     elif mat_num in BCC_CODES:
         return "BCC"
     else:
         return "OTHER"
+@@ -36,7 +60,6 @@ def categorize_material(mat_num):
 
 # Uploaders
 amlog_file   = st.file_uploader("Upload AM LOG EQUIPMENT LIST", type=["xlsx"])
