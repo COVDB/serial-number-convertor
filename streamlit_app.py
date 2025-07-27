@@ -34,7 +34,7 @@ st.title("AM LOG Equipment Filter and Enrichment")
 st.header("1. Upload AM LOG Excel file")
 df1 = None
 file1 = st.file_uploader("Upload AM LOG (AM LOG)", type=["xlsx", "xls"], key='am_log')
-if file1 is not None:
+if file1:
     try:
         df1 = pd.read_excel(file1)
     except Exception as e:
@@ -44,7 +44,7 @@ if file1 is not None:
 st.header("2. Upload ZSD_PO_PER_SO Excel file")
 df2 = None
 file2 = st.file_uploader("Upload ZSD_PO_PER_SO", type=["xlsx", "xls"], key='zsd')
-if file2 is not None:
+if file2:
     try:
         df2 = pd.read_excel(file2)
     except Exception as e:
@@ -53,7 +53,7 @@ if file2 is not None:
 # Verwerk enkel als beide bestanden aanwezig zijn
 if df1 is not None and df2 is not None:
     # Basis filtering op materiaalnummer
-    df1['Material Number'] = df1['Material Number'].astype(str)
+    df1['Material Number'] = df1['Material Number'].astype(str).str.strip()
     filtered = df1[df1['Material Number'].isin(EQUIPMENT_NUMBERS)].copy()
 
     if filtered.empty:
@@ -69,8 +69,11 @@ if df1 is not None and df2 is not None:
             filtered['Year of construction'] = pd.NA
             filtered['Month of construction'] = pd.NA
 
-        # Merge met tweede bestand op Customer Reference = Purch.Doc.
+        # Zorg dat merge keys dezelfde type en format hebben
         if 'Customer Reference' in filtered.columns and 'Purch.Doc.' in df2.columns:
+            filtered['Customer Reference'] = filtered['Customer Reference'].astype(str).str.strip()
+            df2['Purch.Doc.'] = df2['Purch.Doc.'].astype(str).str.strip()
+            # Merge met tweede bestand
             merged = pd.merge(
                 filtered,
                 df2[['Purch.Doc.', 'Project Reference', 'Material']],
@@ -82,7 +85,7 @@ if df1 is not None and df2 is not None:
             st.error("Kan niet mergen: controleer of 'Customer Reference' en 'Purch.Doc.' kolommen aanwezig zijn.")
             merged = filtered
 
-        # Alleen benodigde kolommen tonen en downloaden
+        # Selecteer en toon alleen de gewenste kolommen
         available = [col for col in OUTPUT_COLUMNS if col in merged.columns]
         missing = set(OUTPUT_COLUMNS) - set(available)
         if missing:
@@ -92,7 +95,8 @@ if df1 is not None and df2 is not None:
         st.success(f"Resultaat: {len(result)} regels.")
         st.dataframe(result)
 
-        # Excel export in-memory\ n        output = io.BytesIO()
+        # Excel export in-memory
+        output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             result.to_excel(writer, index=False, sheet_name='Enriched')
         output.seek(0)
