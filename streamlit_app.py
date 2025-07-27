@@ -25,16 +25,12 @@ EQUIPMENT_LIST = [
     '000000000001009719'
 ]
 
-def check_columns(df, expected, df_name):
-    missing = [col for col in expected if col not in df.columns]
-    if missing:
-        st.error(
-            f"Fout: In {df_name} ontbreken de kolommen: {', '.join(missing)}"
-        )
-        st.write(f"Beschikbare kolommen in {df_name}:")
-        st.dataframe(pd.DataFrame({'Columns': df.columns}))
-        return False
-    return True
+def find_col(df, keyword_list):
+    for kw in keyword_list:
+        for col in df.columns:
+            if kw.lower() in col.lower():
+                return col
+    return None
 
 if st.sidebar.button("Run Merge"):
     if not (am_log_file and zsd_file and zstatus_file):
@@ -48,63 +44,77 @@ if st.sidebar.button("Run Merge"):
         zstatus_df = pd.read_excel(zstatus_file, dtype=str)
         zstatus_df.columns = zstatus_df.columns.str.strip()
 
-        # Validate AM LOG columns
-        am_expected = ['Equipment number', 'Customer Reference', 'Serial number',
-                       'Short text for sales order item', 'Delivery Date']
-        if not check_columns(am_df, am_expected, 'AM LOG'):
+        # Dynamic column mapping for AM LOG
+        equip_col = find_col(am_df, ['equipment'])
+        cust_ref_col = find_col(am_df, ['customer reference', 'purch.doc', 'purch doc'])
+        serial_col = find_col(am_df, ['serial'])
+        desc_col = find_col(am_df, ['short text', 'description'])
+        date_col = find_col(am_df, ['delivery date', 'date'])
+        if not all([equip_col, cust_ref_col, serial_col, desc_col, date_col]):
+            st.error("Kan niet alle vereiste kolommen in AM LOG vinden. Controleer headers.")
+            st.write(am_df.columns.tolist())
             st.stop()
 
-        # Step 1: Filter AM LOG
-        am_filtered = am_df[am_df['Equipment number'].isin(EQUIPMENT_LIST)].copy()
+        # Filter AM LOG
+        am_filtered = am_df[am_df[equip_col].isin(EQUIPMENT_LIST)].copy()
+        st.write(f"AM LOG gefilterd: {len(am_filtered)} rijen")
 
-        # Step 2: Create temp output from AM LOG
-        temp = am_filtered[[
-            'Customer Reference', 'Serial number',
-            'Short text for sales order item', 'Delivery Date'
-        ]].copy()
+        # Create temp output
+        temp = am_filtered[[cust_ref_col, serial_col, desc_col, date_col]].copy()
+        temp = temp.rename(columns={
+            cust_ref_col: 'Customer Reference',
+            serial_col: 'Serial number',
+            desc_col: 'Short text for sales order item',
+            date_col: 'Delivery Date'
+        })
 
-        # Extract Year and Month
+        # Extract Year/Month
         temp['Delivery Date'] = pd.to_datetime(temp['Delivery Date'], errors='coerce')
         temp['Year of construction'] = temp['Delivery Date'].dt.year.astype('Int64')
         temp['Month of construction'] = temp['Delivery Date'].dt.strftime('%m')
 
-        # Validate ZSD_PO_PER_SO columns
-        zsd_expected = ['Purch.Doc.', 'Document', 'Material', 'Project Reference']
-        if not check_columns(zsd_df, zsd_expected, 'ZSD_PO_PER_SO'):
+        # Dynamic mapping for ZSD
+        zsd_cust = find_col(zsd_df, ['purch.doc', 'customer reference'])
+        zsd_doc = find_col(zsd_df, ['document'])
+        zsd_mat = find_col(zsd_df, ['material'])
+        zsd_proj = find_col(zsd_df, ['project reference'])
+        if not all([zsd_cust, zsd_doc, zsd_mat, zsd_proj]):
+            st.error("Kan niet alle vereiste kolommen in ZSD_PO_PER_SO vinden. Controleer headers.")
+            st.write(zsd_df.columns.tolist())
             st.stop()
 
-        # Prepare ZSD: rename and select
         zsd_df = zsd_df.rename(columns={
-            'Purch.Doc.': 'Customer Reference',
-            'Document': 'ZSD Document',
-            'Material': 'ZSD Material'
+            zsd_cust: 'Customer Reference',
+            zsd_doc: 'ZSD Document',
+            zsd_mat: 'ZSD Material',
+            zsd_proj: 'Project Reference'
         })
         zsd_df = zsd_df[['Customer Reference', 'ZSD Document', 'ZSD Material', 'Project Reference']]
 
-        # Step 3: Merge with ZSD_PO_PER_SO
-        merged1 = temp.merge(
-            zsd_df,
-            on='Customer Reference', how='left'
-        )
+        merged1 = temp.merge(zsd_df, on='Customer Reference', how='left')
+        st.write(f"Na merge ZSD: {len(merged1)} rijen, mpackage matches: {merged1['ZSD Document'].notna().sum()} ")
 
-        # Validate ZSTATUS columns
-        zstatus_expected = ['Document', 'Sold-to pt', 'Ship-to', 'CoSPa', 'Date OKWV']
-        if not check_columns(zstatus_df, zstatus_expected, 'ZSTATUS'):
+        # Dynamic mapping for ZSTATUS
+        zs_doc = find_col(zstatus_df, ['document'])
+        zs_cols = { 
+            'Sold-to pt': find_col(zstatus_df, ['sold-to']),
+            'Ship-to': find_col(zstatus_df, ['ship-to']),
+            'CoSPa': find_col(zstatus_df, ['cospa']),
+            'Date OKWV': find_col(zstatus_df, ['date okwv'])
+        }
+        if not zs_doc or any(v is None for v in zs_cols.values()):
+            st.error("Kan niet alle vereiste kolommen in ZSTATUS vinden. Controleer headers.")
+            st.write(zstatus_df.columns.tolist())
             st.stop()
 
-        # Prepare ZSTATUS
-        zstatus_df = zstatus_df.rename(columns={'Document': 'ZSD Document'})
-
-        # Step 4: Merge with ZSTATUS
+        zstatus_df = zstatus_df.rename(columns={zs_doc: 'ZSD Document', **zs_cols})
         final_df = merged1.merge(
-            zstatus_df[['ZSD Document', 'Sold-to pt', 'Ship-to', 'CoSPa', 'Date OKWV']],
+            zstatus_df[['ZSD Document', *zs_cols.keys()]],
             on='ZSD Document', how='left'
         )
 
-        # Display and download
         st.success("Merge complete!")
         st.dataframe(final_df)
-
         buffer = BytesIO()
         final_df.to_excel(buffer, index=False, sheet_name='MergedData')
         buffer.seek(0)
