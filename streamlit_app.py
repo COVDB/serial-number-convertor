@@ -29,7 +29,6 @@ if amlog_file and export_file and zstatus_file:
 
         # 3) Kolomselectie
         st.subheader("Selecteer de key‐kolommen")
-
         amlog_ref       = st.selectbox("AM LOG: Customer Reference",   df_amlog.columns)
         export_purch    = st.selectbox("EXPORT: Purch.Doc",             df_export.columns)
         export_project  = st.selectbox("EXPORT: Project Reference",     df_export.columns)
@@ -44,38 +43,14 @@ if amlog_file and export_file and zstatus_file:
         FILTER_MATERIALS = st.text_area(
             "Plak hier jouw material codes, één per regel",
             value="\n".join([
-                "ATL3.3_12X8C",
-                "ATL3.3_12X10C",
-                "ATL3.3_12X10N",
-                "ATL3.3_12X10NM/H",
-                "ATL3.3_10X12N UL",
-                "ATL3.2_12X8C",
-                "ATL3.3_116X116C",
-                "ATL3.3_12X8NM/H",
-                "ATL3.3_12X10N/H",
-                "ATL3.3_12X8N",
-                "ATL3.2_12X10N",
-                "ATL3.3_12X12N",
-                "ATL3.2_12X10N/H",
-                "ATL3.3_12X8NM",
-                "ATL3.3_12X12N UL",
-                "ATL3.3_12X10NM",
-                "ATL3.3_12X10CM",
-                "ATL3.2_12X8N",
-                "ATL3.2_12X10C",
-                "ATL3.3_12X10CC",
-                "ATL3.3_12X10NM/L1",
-                "ATL3.3_10X12C UL",
-                "ATL3.3_12X8N/H",
-                "ATL3.3_10X12N FCC",
-                "ATL3.3_10X12C FCC",
-                "ATL3.3_10X12N",
-                "ATL3.3_12X10NW",
-                "ATL3.3_12X12NW",
-                "ATL3.3_114X114N/H",
-                "ATL3.3_12X8C/H",
-                "ATL3.3_115X100N",
-                "ATL3.3_114X114N",
+                "ATL3.3_12X8C","ATL3.3_12X10C","ATL3.3_12X10N","ATL3.3_12X10NM/H",
+                "ATL3.3_10X12N UL","ATL3.2_12X8C","ATL3.3_116X116C","ATL3.3_12X8NM/H",
+                "ATL3.3_12X10N/H","ATL3.3_12X8N","ATL3.2_12X10N","ATL3.3_12X12N",
+                "ATL3.2_12X10N/H","ATL3.3_12X8NM","ATL3.3_12X12N UL","ATL3.3_12X10NM",
+                "ATL3.3_12X10CM","ATL3.2_12X8N","ATL3.2_12X10C","ATL3.3_12X10CC",
+                "ATL3.3_12X10NM/L1","ATL3.3_10X12C UL","ATL3.3_12X8N/H","ATL3.3_10X12N FCC",
+                "ATL3.3_10X12C FCC","ATL3.3_10X12N","ATL3.3_12X10NW","ATL3.3_12X12NW",
+                "ATL3.3_114X114N/H","ATL3.3_12X8C/H","ATL3.3_115X100N","ATL3.3_114X114N",
                 "ATL3.3_12X8N/L1"
             ])
         )
@@ -118,7 +93,7 @@ if amlog_file and export_file and zstatus_file:
             # 9) Filter op Material‐kolom van EXPORT
             if "Material" not in df123.columns:
                 st.error("Kolom 'Material' niet gevonden in de merged data.")
-                return
+                st.stop()
             df_filtered = df123[df123["Material"].astype(str).isin(filter_list)].copy()
             st.write(f"Na filter op Material: {len(df_filtered)} rijen")
 
