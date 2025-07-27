@@ -30,77 +30,77 @@ OUTPUT_COLUMNS = [
 
 st.title("AM LOG Equipment Filter and Enrichment")
 
-# Eerste bestand upload (AM LOG)
+# 1. Upload AM LOG
 st.header("1. Upload AM LOG Excel file")
 df1 = None
-file1 = st.file_uploader("Upload AM LOG (AM LOG)", type=["xlsx", "xls"], key='am_log')
+file1 = st.file_uploader("Upload AM LOG", type=["xlsx", "xls"], key='am_log')
 if file1:
     try:
         df1 = pd.read_excel(file1)
     except Exception as e:
         st.error(f"Fout bij het lezen van AM LOG: {e}")
 
-# Tweede bestand upload (ZSD_PO_PER_SO)
+# 2. Upload ZSD_PO_PER_SO
 st.header("2. Upload ZSD_PO_PER_SO Excel file")
 df2 = None
 file2 = st.file_uploader("Upload ZSD_PO_PER_SO", type=["xlsx", "xls"], key='zsd')
 if file2:
     try:
         df2 = pd.read_excel(file2)
+        # Strip kolomnamen en whitespace
+        df2.columns = df2.columns.str.strip()
+        # Rename Purch.Doc. naar Customer Reference voor eenvoudiger merge
+        if 'Purch.Doc.' in df2.columns:
+            df2 = df2.rename(columns={'Purch.Doc.': 'Customer Reference'})
+        else:
+            st.error("Kolom 'Purch.Doc.' niet gevonden in ZSD_PO_PER_SO")
     except Exception as e:
         st.error(f"Fout bij het lezen van ZSD_PO_PER_SO: {e}")
 
-# Verwerk enkel als beide bestanden aanwezig zijn
+# Verwerk wanneer beide bestanden zijn geüpload
 if df1 is not None and df2 is not None:
-    # Basis filtering op materiaalnummer
+    # Filter op materiaalnummer
     df1['Material Number'] = df1['Material Number'].astype(str).str.strip()
     filtered = df1[df1['Material Number'].isin(EQUIPMENT_NUMBERS)].copy()
 
     if filtered.empty:
         st.warning("Geen overeenkomende regels in AM LOG voor de opgegeven equipment nummers.")
     else:
-        # Extract Year and Month from Delivery Date
+        # Voeg bouwjaar en -maand toe
         if 'Delivery Date' in filtered.columns:
             filtered['Delivery Date'] = pd.to_datetime(filtered['Delivery Date'], errors='coerce')
-            filtered['Year of construction'] = filtered['Delivery Date'].dt.year.astype('Int64')
-            filtered['Month of construction'] = filtered['Delivery Date'].dt.month.astype('Int64')
+            filtered['Year of construction'] = filtered['Delivery Date'].dt.year
+            filtered['Month of construction'] = filtered['Delivery Date'].dt.month
         else:
-            st.warning("Kolom 'Delivery Date' ontbreekt; geen bouwjaar/maand.")
+            st.warning("Kolom 'Delivery Date' ontbreekt; bouwjaar/maand niet toe te voegen.")
             filtered['Year of construction'] = pd.NA
             filtered['Month of construction'] = pd.NA
 
-        # Zorg dat merge keys dezelfde type en format hebben
-        if 'Customer Reference' in filtered.columns and 'Purch.Doc.' in df2.columns:
+        # Prepareer Customer Reference
+        if 'Customer Reference' in filtered.columns:
             filtered['Customer Reference'] = filtered['Customer Reference'].astype(str).str.strip()
-            df2['Purch.Doc.'] = df2['Purch.Doc.'].astype(str).str.strip()
-            # Merge met tweede bestand
-            merged = pd.merge(
-                filtered,
-                df2[['Purch.Doc.', 'Project Reference', 'Material']],
-                how='left',
-                left_on='Customer Reference',
-                right_on='Purch.Doc.'
-            )
         else:
-            st.error("Kan niet mergen: controleer of 'Customer Reference' en 'Purch.Doc.' kolommen aanwezig zijn.")
-            merged = filtered
+            st.error("Kolom 'Customer Reference' ontbreekt in AM LOG")
 
-        # Selecteer en toon alleen de gewenste kolommen
+        # Merge met df2
+        merged = pd.merge(
+            filtered,
+            df2[['Customer Reference', 'Project Reference', 'Material']],
+            on='Customer Reference',
+            how='left'
+        )
+
+        # Selecteer en toon result
         available = [col for col in OUTPUT_COLUMNS if col in merged.columns]
-        missing = set(OUTPUT_COLUMNS) - set(available)
-        if missing:
-            st.warning(f"Ontbrekende kolommen en niet getoond: {', '.join(missing)}")
-
         result = merged[available]
         st.success(f"Resultaat: {len(result)} regels.")
         st.dataframe(result)
 
-        # Excel export in-memory
+        # Exporteer naar Excel in-memory
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             result.to_excel(writer, index=False, sheet_name='Enriched')
         output.seek(0)
-
         st.download_button(
             label="Download resultaat als Excel",
             data=output,
