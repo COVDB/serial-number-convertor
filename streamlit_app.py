@@ -1,122 +1,95 @@
 import streamlit as st
 import pandas as pd
-import io
+from io import BytesIO
 
-# Lijst met equipment nummers om te filteren
-equipment_numbers = [
-    '000000000001001917', '000000000001001808', '000000000001001749',
-    '000000000001001776', '000000000001001911', '000000000001001755',
-    '000000000001001760', '000000000001001809', '000000000001001747',
-    '000000000001001711', '000000000001001757', '000000000001001708',
-    '000000000001001770', '000000000001001710', '000000000001001771',
-    '000000000001001758', '000000000001007905', '000000000001001753',
-    '000000000001001752', '000000000001008374', '000000000001001805',
-    '000000000001001709', '000000000001008561', '000000000001008560',
-    '000000000001001765', '000000000001001775', '000000000001009105',
-    '000000000001001777', '000000000001001742', '000000000001001813',
+st.set_page_config(page_title="Excel Merge Tool", layout="wide")
+
+st.title("Excel Merge & Filter App")
+
+# Sidebar file upload
+am_log_file = st.sidebar.file_uploader("Upload AM LOG file", type=["xlsx", "xls"], key="am_log")
+zsd_file = st.sidebar.file_uploader("Upload ZSD_PO_PER_SO file", type=["xlsx", "xls"], key="zsd")
+zstatus_file = st.sidebar.file_uploader("Upload ZSTATUS file", type=["xlsx", "xls"], key="zstatus")
+
+# Equipment number filter list
+EQUIPMENT_LIST = [
+    '000000000001001917','000000000001001808','000000000001001749',
+    '000000000001001776','000000000001001911','000000000001001755',
+    '000000000001001760','000000000001001809','000000000001001747',
+    '000000000001001711','000000000001001757','000000000001001708',
+    '000000000001001770','000000000001001710','000000000001001771',
+    '000000000001001758','000000000001007905','000000000001001753',
+    '000000000001001752','000000000001008374','000000000001001805',
+    '000000000001001709','000000000001008561','000000000001008560',
+    '000000000001001765','000000000001001775','000000000001009105',
+    '000000000001001777','000000000001001742','000000000001001813',
     '000000000001009719'
 ]
 
-# Definieer output kolommen
-def get_output_columns():
-    return [
-        'Customer Reference',
-        'Serial number',
-        'Short text for sales order item',
-        'Year of construction',
-        'Month of construction',
-        'Project Reference',
-        'Material'
-    ]
-
-st.title("AM LOG Filter & Enrichment")
-
-# 1. Upload AM LOG
-st.header("1. Upload AM LOG Excel file")
-df1 = None
-file1 = st.file_uploader("AM LOG (xlsx/xls)", type=["xlsx", "xls"], key='am_log')
-if file1:
-    try:
-        df1 = pd.read_excel(file1)
-        df1.columns = df1.columns.str.strip()
-        st.write("AM LOG preview:", df1.head())
-    except Exception as e:
-        st.error(f"Fout bij lezen AM LOG: {e}")
-
-# 2. Upload ZSD_PO_PER_SO
-st.header("2. Upload ZSD_PO_PER_SO Excel file")
-df2 = None
-file2 = st.file_uploader("ZSD_PO_PER_SO (xlsx/xls)", type=["xlsx", "xls"], key='zsd')
-if file2:
-    try:
-        df2 = pd.read_excel(file2)
-        df2.columns = df2.columns.str.strip()
-        st.write("ZSD_PO_PER_SO preview:", df2.head())
-        # Rename Purch.Doc(s) to Customer Reference
-        if 'Purch.Doc.' in df2.columns:
-            df2 = df2.rename(columns={'Purch.Doc.': 'Customer Reference'})
-        elif 'Purch.Doc' in df2.columns:
-            df2 = df2.rename(columns={'Purch.Doc': 'Customer Reference'})
-        else:
-            st.error("Kolom 'Purch.Doc.' of 'Purch.Doc' niet gevonden in ZSD_PO_PER_SO.")
-        # Strip key
-        df2['Customer Reference'] = df2['Customer Reference'].astype(str).str.strip()
-    except Exception as e:
-        st.error(f"Fout bij lezen ZSD_PO_PER_SO: {e}")
-
-# 3. Verwerk beide bestanden
-if df1 is not None and df2 is not None:
-    # Strip en standaardiseer
-    df1 = df1.copy()
-    df1.columns = df1.columns.str.strip()
-    df1['Customer Reference'] = df1.get('Customer Reference', pd.Series(dtype=str)).astype(str).str.strip()
-    df1['Material Number'] = df1.get('Material Number', pd.Series(dtype=str)).astype(str).str.strip()
-
-    # 3a. Filter op equipment numbers
-    df_filtered = df1[df1['Material Number'].isin(equipment_numbers)].copy()
-    if df_filtered.empty:
-        st.warning("Geen AM LOG regels voor de opgegeven equipment nummers.")
+if st.sidebar.button("Run Merge"):
+    if not (am_log_file and zsd_file and zstatus_file):
+        st.error("Please upload all three files to proceed.")
     else:
-        # 3b. Extract jaar/maand uit Delivery Date
-        if 'Delivery Date' in df_filtered.columns:
-            df_filtered['Delivery Date'] = pd.to_datetime(df_filtered['Delivery Date'], errors='coerce')
-            df_filtered['Year of construction']  = df_filtered['Delivery Date'].dt.year
-            df_filtered['Month of construction'] = df_filtered['Delivery Date'].dt.month
-        else:
-            df_filtered['Year of construction']  = pd.NA
-            df_filtered['Month of construction'] = pd.NA
+        # Read files
+        am_df = pd.read_excel(am_log_file, dtype=str)
+        zsd_df = pd.read_excel(zsd_file, dtype=str)
+        zstatus_df = pd.read_excel(zstatus_file, dtype=str)
 
-        # 3c. Merge met ZSD
-        merged = pd.merge(
-            df_filtered,
-            df2[['Customer Reference', 'Project Reference', 'Material']],
-            on='Customer Reference',
-            how='left',
-            indicator=True
+        # Step 1: Filter AM LOG
+        am_filtered = am_df[am_df['Equipment number'].isin(EQUIPMENT_LIST)].copy()
+
+        # Step 2: Create temporary output
+        temp = am_filtered[[
+            'Customer Reference',
+            'Serial number',
+            'Short text for sales order item',
+            'Delivery Date',
+            'Project Reference',
+            'Material'
+        ]].copy()
+
+        # Extract Year and Month
+        temp['Delivery Date'] = pd.to_datetime(temp['Delivery Date'], errors='coerce')
+        temp['Year of construction'] = temp['Delivery Date'].dt.year.astype('Int64')
+        temp['Month of construction'] = temp['Delivery Date'].dt.strftime('%m')
+
+        # Reorder and drop original
+        temp = temp.rename(columns={'Material': 'AM Material'})
+        temp = temp[[
+            'Customer Reference',
+            'Serial number',
+            'Short text for sales order item',
+            'Year of construction',
+            'Month of construction',
+            'Project Reference',
+            'AM Material'
+        ]]
+
+        # Step 3: Merge with ZSD_PO_PER_SO
+        zsd_df = zsd_df.rename(columns={'Purch.Doc.': 'Customer Reference',
+                                        'Document': 'ZSD Document',
+                                        'Material': 'ZSD Material'})
+        merged1 = temp.merge(zsd_df[['Customer Reference', 'ZSD Document', 'ZSD Material']],
+                             on='Customer Reference', how='left')
+
+        # Step 4: Merge with ZSTATUS
+        zstatus_df = zstatus_df.rename(columns={'Document': 'ZSD Document'})
+        final_df = merged1.merge(
+            zstatus_df[['ZSD Document', 'Sold-to pt', 'Ship-to', 'CoSPa', 'Date OKWV']],
+            on='ZSD Document', how='left'
         )
-        st.write("Merge status:", merged['_merge'].value_counts())
 
-        matched = merged[merged['_merge'] == 'both']
-        if not matched.empty:
-            st.write("Sample matches:", matched[['Customer Reference', 'Project Reference', 'Material']].head())
-        else:
-            st.error("Geen overeenkomstige Customer References gevonden.")
+        # Display and download
+        st.success("Merge complete!")
+        st.dataframe(final_df)
 
-        # 3d. Selectie output en weergave
-        cols = [c for c in get_output_columns() if c in merged.columns]
-        result = merged[cols]
-        st.success(f"Resultaat: {len(result)} regels.")
-        st.dataframe(result)
-
-        # 3e. Download knop
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            result.to_excel(writer, index=False, sheet_name='Enriched')
-        output.seek(0)
+        # Download button
+        towrite = BytesIO()
+        final_df.to_excel(towrite, index=False, sheet_name='MergedData')
+        towrite.seek(0)
         st.download_button(
-            label="Download resultaat als Excel",
-            data=output,
-            file_name="am_log_enriched.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key='download'
+            label="Download merged Excel",
+            data=towrite,
+            file_name="merged_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
