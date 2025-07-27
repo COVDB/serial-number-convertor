@@ -18,42 +18,55 @@ EQUIPMENT_NUMBERS = [
 ]
 
 # Kolommen die we willen behouden in de output
-OUTPUT_COLUMNS = [
-    'Customer Reference',
-    'Serial number',
-    'Short text for sales order item',
-    'Year of construction',
-    'Month of construction',
-    'Project Reference',  # vanuit tweede bestand
-    'Material'            # vanuit tweede bestand
-]
+def get_output_columns():
+    return [
+        'Customer Reference',
+        'Serial number',
+        'Short text for sales order item',
+        'Year of construction',
+        'Month of construction',
+        'Project Reference',  # vanuit tweede bestand
+        'Material'            # vanuit tweede bestand
+    ]
 
 st.title("AM LOG Equipment Filter and Enrichment")
 
-# Eerste bestand upload (AM LOG)
+# 1. Upload AM LOG
 st.header("1. Upload AM LOG Excel file")
 df1 = None
-file1 = st.file_uploader("Upload AM LOG (AM LOG)", type=["xlsx", "xls"], key='am_log')
+file1 = st.file_uploader("Upload AM LOG (xlsx/xls)", type=["xlsx", "xls"], key='am_log')
 if file1 is not None:
     try:
         df1 = pd.read_excel(file1)
+        df1.columns = df1.columns.str.strip()
+        st.write("AM LOG preview:", df1.head())
     except Exception as e:
         st.error(f"Fout bij het lezen van AM LOG: {e}")
 
-# Tweede bestand upload (ZSD_PO_PER_SO)
+# 2. Upload ZSD_PO_PER_SO
 st.header("2. Upload ZSD_PO_PER_SO Excel file")
 df2 = None
-file2 = st.file_uploader("Upload ZSD_PO_PER_SO", type=["xlsx", "xls"], key='zsd')
+file2 = st.file_uploader("Upload ZSD_PO_PER_SO (xlsx/xls)", type=["xlsx", "xls"], key='zsd')
 if file2 is not None:
     try:
         df2 = pd.read_excel(file2)
+        df2.columns = df2.columns.str.strip()
+        st.write("ZSD_PO_PER_SO preview:", df2.head())
+        # Rename Purch.Doc or Purch.Doc. to Customer Reference for merge
+        if 'Purch.Doc.' in df2.columns:
+            df2 = df2.rename(columns={'Purch.Doc.': 'Customer Reference'})
+        elif 'Purch.Doc' in df2.columns:
+            df2 = df2.rename(columns={'Purch.Doc': 'Customer Reference'})
+        else:
+            st.error("Kolom 'Purch.Doc.' of 'Purch.Doc' niet gevonden in ZSD_PO_PER_SO.")
+        df2['Customer Reference'] = df2['Customer Reference'].astype(str).str.strip()
     except Exception as e:
         st.error(f"Fout bij het lezen van ZSD_PO_PER_SO: {e}")
 
-# Verwerk enkel als beide bestanden aanwezig zijn
+# 3. Verwerk en merge
 if df1 is not None and df2 is not None:
-    # Basis filtering op materiaalnummer
-    df1['Material Number'] = df1['Material Number'].astype(str)
+    # Filter op equipment nummers
+    df1['Material Number'] = df1['Material Number'].astype(str).str.strip()
     filtered = df1[df1['Material Number'].isin(EQUIPMENT_NUMBERS)].copy()
 
     if filtered.empty:
@@ -69,22 +82,27 @@ if df1 is not None and df2 is not None:
             filtered['Year of construction'] = pd.NA
             filtered['Month of construction'] = pd.NA
 
-        # Merge met tweede bestand op Customer Reference = Purch.Doc.
-        if 'Customer Reference' in filtered.columns and 'Purch.Doc.' in df2.columns:
-            merged = pd.merge(
-                filtered,
-                df2[['Purch.Doc.', 'Project Reference', 'Material']],
-                how='left',
-                left_on='Customer Reference',
-                right_on='Purch.Doc.'
-            )
-        else:
-            st.error("Kan niet mergen: controleer of 'Customer Reference' en 'Purch.Doc.' kolommen aanwezig zijn.")
-            merged = filtered
+        # Merge met tweede bestand op Customer Reference
+        merged = pd.merge(
+            filtered,
+            df2[['Customer Reference', 'Project Reference', 'Material']],
+            how='left',
+            left_on='Customer Reference',
+            right_on='Customer Reference',
+            indicator=True
+        )
+        st.write("Merge status:", merged['_merge'].value_counts())
 
-        # Alleen benodigde kolommen tonen en downloaden
-        available = [col for col in OUTPUT_COLUMNS if col in merged.columns]
-        missing = set(OUTPUT_COLUMNS) - set(available)
+        # Toon enkele matched records
+        matches = merged[merged['_merge'] == 'both']
+        if not matches.empty:
+            st.write("Enkele matched records:", matches[['Customer Reference', 'Project Reference', 'Material']].head())
+        else:
+            st.error("Geen overeenkomstige Customer References gevonden in ZSD_PO_PER_SO.")
+
+        # Selecteer en toon alleen benodigde kolommen
+        available = [col for col in get_output_columns() if col in merged.columns]
+        missing = set(get_output_columns()) - set(available)
         if missing:
             st.warning(f"Ontbrekende kolommen en niet getoond: {', '.join(missing)}")
 
@@ -92,7 +110,8 @@ if df1 is not None and df2 is not None:
         st.success(f"Resultaat: {len(result)} regels.")
         st.dataframe(result)
 
-        # Excel export in-memory\ n        output = io.BytesIO()
+        # Exporteer naar Excel in-memory
+        output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             result.to_excel(writer, index=False, sheet_name='Enriched')
         output.seek(0)
@@ -101,5 +120,6 @@ if df1 is not None and df2 is not None:
             label="Download resultaat als Excel",
             data=output,
             file_name="am_log_enriched.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key='download'
         )
