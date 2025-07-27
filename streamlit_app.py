@@ -72,22 +72,21 @@ if df1 is not None and df2 is not None:
     df1['Customer Reference'] = df1.get('Customer Reference', pd.Series(dtype=str)).astype(str).str.strip()
     df1['Material Number'] = df1.get('Material Number', pd.Series(dtype=str)).astype(str).str.strip()
 
-    # Filter op equipment numbers
-df_filtered = df1[df1['Material Number'].isin(equipment_numbers)].copy()
-if df1 is not None and df2 is not None:
+    # 3a. Filter op equipment numbers
+    df_filtered = df1[df1['Material Number'].isin(equipment_numbers)].copy()
     if df_filtered.empty:
         st.warning("Geen AM LOG regels voor de opgegeven equipment nummers.")
     else:
-        # Extract jaar/maand uit Delivery Date
+        # 3b. Extract jaar/maand uit Delivery Date
         if 'Delivery Date' in df_filtered.columns:
             df_filtered['Delivery Date'] = pd.to_datetime(df_filtered['Delivery Date'], errors='coerce')
-            df_filtered['Year of construction'] = df_filtered['Delivery Date'].dt.year
+            df_filtered['Year of construction']  = df_filtered['Delivery Date'].dt.year
             df_filtered['Month of construction'] = df_filtered['Delivery Date'].dt.month
         else:
-            df_filtered['Year of construction'] = pd.NA
+            df_filtered['Year of construction']  = pd.NA
             df_filtered['Month of construction'] = pd.NA
 
-        # Merge met ZSD
+        # 3c. Merge met ZSD
         merged = pd.merge(
             df_filtered,
             df2[['Customer Reference', 'Project Reference', 'Material']],
@@ -97,19 +96,19 @@ if df1 is not None and df2 is not None:
         )
         st.write("Merge status:", merged['_merge'].value_counts())
 
-        matched = merged[merged['_merge']=='both']
+        matched = merged[merged['_merge'] == 'both']
         if not matched.empty:
-            st.write("Sample matches:", matched[['Customer Reference','Project Reference','Material']].head())
+            st.write("Sample matches:", matched[['Customer Reference', 'Project Reference', 'Material']].head())
         else:
             st.error("Geen overeenkomstige Customer References gevonden.")
 
-        # Selectie output en weergave
+        # 3d. Selectie output en weergave
         cols = [c for c in get_output_columns() if c in merged.columns]
         result = merged[cols]
         st.success(f"Resultaat: {len(result)} regels.")
         st.dataframe(result)
 
-        # Download
+        # 3e. Download knop
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             result.to_excel(writer, index=False, sheet_name='Enriched')
