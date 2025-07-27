@@ -20,35 +20,36 @@ EQUIPMENT_NUMBERS = [
 st.title("AM LOG Equipment Filter")
 
 # Upload van het Excel-bestand
+df = None
 uploaded_file = st.file_uploader("Upload AM LOG Excel file", type=["xlsx", "xls"])
 if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file)
     except Exception as e:
         st.error(f"Fout bij het lezen van het Excel-bestand: {e}")
+
+if df is not None:
+    # Zorg dat Material Number als string behandeld wordt
+    df['Material Number'] = df['Material Number'].astype(str)
+    # Filter de rijen
+    filtered_df = df[df['Material Number'].isin(EQUIPMENT_NUMBERS)]
+
+    if filtered_df.empty:
+        st.warning("Geen overeenkomende regels gevonden voor de opgegeven equipment nummers.")
     else:
-        # Zorg dat Material Number als string behandeld wordt
-        df['Material Number'] = df['Material Number'].astype(str)
-        # Filter de rijen
-        filtered_df = df[df['Material Number'].isin(EQUIPMENT_NUMBERS)]
+        st.success(f"Gevonden {len(filtered_df)} regels.")
+        st.dataframe(filtered_df)
 
-        if filtered_df.empty:
-            st.warning("Geen overeenkomende regels gevonden voor de opgegeven equipment nummers.")
-        else:
-            st.success(f"Gevonden {len(filtered_df)} regels.")
-            st.dataframe(filtered_df)
+        # Maak een Excel-bestand in-memory met openpyxl
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            filtered_df.to_excel(writer, index=False, sheet_name='Filtered')
+        output.seek(0)
 
-            # Maak een Excel-bestand in-memory met openpyxl
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                filtered_df.to_excel(writer, index=False, sheet_name='Filtered')
-                writer.save()
-            output.seek(0)
-
-            # Download knop
-            st.download_button(
-                label="Download gefilterde resultaten als Excel",
-                data=output,
-                file_name="filtered_am_log.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        # Download knop
+        st.download_button(
+            label="Download gefilterde resultaten als Excel",
+            data=output,
+            file_name="filtered_am_log.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
