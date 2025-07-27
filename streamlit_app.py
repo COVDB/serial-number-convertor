@@ -17,6 +17,15 @@ EQUIPMENT_NUMBERS = [
     '000000000001009719'
 ]
 
+# Kolommen die we willen behouden in de output
+OUTPUT_COLUMNS = [
+    'Customer Reference',
+    'Serial number',
+    'Short text for sales order item',
+    'Year of construction',
+    'Month of construction'
+]
+
 st.title("AM LOG Equipment Filter")
 
 # Upload van het Excel-bestand
@@ -37,13 +46,20 @@ if df is not None:
     if filtered_df.empty:
         st.warning("Geen overeenkomende regels gevonden voor de opgegeven equipment nummers.")
     else:
-        st.success(f"Gevonden {len(filtered_df)} regels.")
-        st.dataframe(filtered_df)
+        # Selecteer alleen de benodigde kolommen (controleer aanwezigheid)
+        available_cols = [col for col in OUTPUT_COLUMNS if col in filtered_df.columns]
+        missing_cols = set(OUTPUT_COLUMNS) - set(available_cols)
+        if missing_cols:
+            st.warning(f"De volgende kolommen ontbreken in het bestand en worden niet opgenomen: {', '.join(missing_cols)}")
+
+        result_df = filtered_df[available_cols]
+        st.success(f"Gevonden {len(result_df)} regels met de geselecteerde kolommen.")
+        st.dataframe(result_df)
 
         # Maak een Excel-bestand in-memory met openpyxl
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            filtered_df.to_excel(writer, index=False, sheet_name='Filtered')
+            result_df.to_excel(writer, index=False, sheet_name='Filtered')
         output.seek(0)
 
         # Download knop
