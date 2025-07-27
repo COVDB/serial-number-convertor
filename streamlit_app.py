@@ -43,7 +43,7 @@ if st.sidebar.button("Run Merge"):
     zstatus_df.columns = zstatus_df.columns.str.strip()
 
     # Identify equipment column
-    equip_col = find_col(am_df, ['equipment'])
+    equip_col = find_col(am_df, ['equipment number', 'equipment'])
     if not equip_col:
         st.error("Kan kolom 'Equipment number' niet vinden in AM LOG.")
         st.write(am_df.columns.tolist())
