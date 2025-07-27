@@ -25,7 +25,7 @@ def get_output_columns():
         'Short text for sales order item',
         'Year of construction',
         'Month of construction',
-        'Project Reference',
+        'Document',
         'Material'
     ]
 
@@ -39,6 +39,7 @@ if file1:
     try:
         df1 = pd.read_excel(file1)
         df1.columns = df1.columns.str.strip()
+        st.write("AM LOG preview:", df1.head())
     except Exception as e:
         st.error(f"Fout bij lezen AM LOG: {e}")
 
@@ -50,13 +51,16 @@ if file2:
     try:
         df2 = pd.read_excel(file2)
         df2.columns = df2.columns.str.strip()
-        # Rename Purch.Doc or Purch.Doc. to Customer Reference
+        # Toon preview
+        st.write("ZSD_PO_PER_SO preview:", df2.head())
+        # Rename Purch.Doc(s) to Customer Reference
         if 'Purch.Doc.' in df2.columns:
             df2 = df2.rename(columns={'Purch.Doc.': 'Customer Reference'})
         elif 'Purch.Doc' in df2.columns:
             df2 = df2.rename(columns={'Purch.Doc': 'Customer Reference'})
         else:
-            st.error("Kolom 'Purch.Doc' niet gevonden in ZSD_PO_PER_SO")
+            st.error("Kolom 'Purch.Doc.' of 'Purch.Doc' niet gevonden in ZSD_PO_PER_SO")
+        st.write("ZSD_PO_PER_SO keys:", df2[['Customer Reference', 'Document' if 'Document' in df2.columns else df2.columns[0], 'Material']].head())
     except Exception as e:
         st.error(f"Fout bij lezen ZSD_PO_PER_SO: {e}")
 
@@ -64,7 +68,6 @@ if file2:
 if df1 is not None and df2 is not None:
     # Standaardiseer keys
     df1 = df1.copy()
-    df1.columns = df1.columns.str.strip()
     df1['Customer Reference'] = df1.get('Customer Reference', pd.Series(dtype=str)).astype(str).str.strip()
     df1['Material Number'] = df1.get('Material Number', pd.Series(dtype=str)).astype(str).str.strip()
     df2['Customer Reference'] = df2['Customer Reference'].astype(str).str.strip()
@@ -83,13 +86,23 @@ if df1 is not None and df2 is not None:
             filtered['Year of construction'] = pd.NA
             filtered['Month of construction'] = pd.NA
 
-        # Merge op Customer Reference en haal Project Reference en Material
+        # Merge op Customer Reference en haal Document en Material
         merged = pd.merge(
             filtered,
-            df2[['Customer Reference', 'Project Reference', 'Material']],
+            df2[['Customer Reference', 'Document', 'Material']],
             on='Customer Reference',
-            how='left'
+            how='left',
+            indicator=True
         )
+        # Toon merge indicator
+        st.write("Merge status:", merged['_merge'].value_counts())
+
+        # Toon paar matched records
+        matched = merged[merged['_merge'] == 'both']
+        if not matched.empty:
+            st.write("Enkele matched records:", matched[['Customer Reference', 'Document', 'Material']].head())
+        else:
+            st.error("Geen overeenkomende Customer References gevonden tussen AM LOG en ZSD_PO_PER_SO.")
 
         # Toon resultaat en exporteren
         cols = [c for c in get_output_columns() if c in merged.columns]
@@ -103,8 +116,7 @@ if df1 is not None and df2 is not None:
             result.to_excel(writer, index=False, sheet_name='Enriched')
         output.seek(0)
         st.download_button(
-            "Download Excel",
-            data=output,
+            "Download Excel", data=output,
             file_name="am_log_enriched.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
