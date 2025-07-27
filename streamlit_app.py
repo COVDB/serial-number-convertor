@@ -41,11 +41,24 @@ if df is not None:
     # Zorg dat Material Number als string behandeld wordt
     df['Material Number'] = df['Material Number'].astype(str)
     # Filter de rijen
-    filtered_df = df[df['Material Number'].isin(EQUIPMENT_NUMBERS)]
+    filtered_df = df[df['Material Number'].isin(EQUIPMENT_NUMBERS)].copy()
 
     if filtered_df.empty:
         st.warning("Geen overeenkomende regels gevonden voor de opgegeven equipment nummers.")
     else:
+        # Extract Year and Month from Delivery Date
+        if 'Delivery Date' in filtered_df.columns:
+            # Parse to datetime (format YYYY-MM-DD)
+            filtered_df['Delivery Date'] = pd.to_datetime(filtered_df['Delivery Date'], errors='coerce')
+            # Create construction year/month columns
+            filtered_df['Year of construction'] = filtered_df['Delivery Date'].dt.year.fillna('').astype(str)
+            filtered_df['Month of construction'] = filtered_df['Delivery Date'].dt.month.fillna('').astype(str).str.zfill(2)
+        else:
+            st.warning("Kolom 'Delivery Date' ontbreekt; kan geen bouwjaar/maand extraheren.")
+            # Still add empty columns
+            filtered_df['Year of construction'] = ''
+            filtered_df['Month of construction'] = ''
+
         # Selecteer alleen de benodigde kolommen (controleer aanwezigheid)
         available_cols = [col for col in OUTPUT_COLUMNS if col in filtered_df.columns]
         missing_cols = set(OUTPUT_COLUMNS) - set(available_cols)
