@@ -31,7 +31,7 @@ if CHECK_MATERIAL in MATERIAL_LIST:
 else:
     st.sidebar.warning(f"Test value {CHECK_MATERIAL} NOT found in material list")
 
- def find_col(df, keyword_list):
+def find_col(df, keyword_list):
     for kw in keyword_list:
         for col in df.columns:
             if kw.lower() in col.lower():
