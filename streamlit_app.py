@@ -25,12 +25,14 @@ MATERIAL_LIST = [
     '000000000001009719'
 ]
 MATERIAL_LIST = [m.zfill(18) for m in MATERIAL_LIST]
-CHECK_MATERIAL = '000000000010001878'
+
+CHECK_MATERIAL = '00000000001001917'
 if CHECK_MATERIAL in MATERIAL_LIST:
     st.sidebar.info(f"Test value {CHECK_MATERIAL} found in material list")
 else:
     st.sidebar.warning(f"Test value {CHECK_MATERIAL} NOT found in material list")
 
+# Utility to find column by keyword
 def find_col(df, keyword_list):
     for kw in keyword_list:
         for col in df.columns:
@@ -39,11 +41,12 @@ def find_col(df, keyword_list):
     return None
 
 if st.sidebar.button("Run Merge"):
+    # Validate file uploads
     if not (am_log_file and zsd_file and zstatus_file):
         st.error("Please upload all three files to proceed.")
         st.stop()
 
-    # Load and clean
+    # Load dataframes and strip headers
     am_df = pd.read_excel(am_log_file, dtype=str)
     am_df.columns = am_df.columns.str.strip()
     zsd_df = pd.read_excel(zsd_file, dtype=str)
@@ -51,30 +54,26 @@ if st.sidebar.button("Run Merge"):
     zstatus_df = pd.read_excel(zstatus_file, dtype=str)
     zstatus_df.columns = zstatus_df.columns.str.strip()
 
-    # Identify material number column
+    # Identify and clean Material Number column in AM LOG
     material_col = find_col(am_df, ['material number', 'material'])
     if not material_col:
         st.error("Kan kolom 'Material Number' niet vinden in AM LOG.")
         st.write(am_df.columns.tolist())
         st.stop()
-
-    # Clean material values to consistent 18-digit strings
     am_df[material_col] = (
-        am_df[material_col]
-        .astype(str)
+        am_df[material_col].astype(str)
         .str.strip()
         .str.replace(r"\.0$", "", regex=True)
         .str.zfill(18)
     )
 
-    # Debug cleaned material values
-    st.subheader("Material Number column cleaned & sample values")
-    st.write(f"Column used: '{material_col}' with dtype {am_df[material_col].dtype}")
-    st.write(am_df[material_col].unique()[:10])
+    # Debug: show cleaned material sample
+    st.subheader("Material Number cleaned & matches")
+    st.write(f"Column used: {material_col}")
     common = set(am_df[material_col].unique()).intersection(MATERIAL_LIST)
-    st.write(f"Matches with MATERIAL_LIST: {len(common)} => {list(common)[:10]}")
+    st.write(f"Matches: {len(common)} -> {list(common)[:10]}")
 
-    # Map other AM LOG cols
+    # Map other AM LOG columns
     cust_ref_col = find_col(am_df, ['customer reference', 'purch.doc', 'purch doc'])
     serial_col = find_col(am_df, ['serial'])
     desc_col = find_col(am_df, ['short text', 'description'])
@@ -83,24 +82,22 @@ if st.sidebar.button("Run Merge"):
         st.error("Ontbrekende kolommen in AM LOG voor verdere verwerking.")
         st.stop()
 
-    # Filter by material number
+    # Filter AM LOG on Material Number
     am_filtered = am_df[am_df[material_col].isin(MATERIAL_LIST)].copy()
     st.subheader("Filtered AM LOG by Material Number")
-    st.write(am_filtered.shape)
+    st.write(f"Rows: {am_filtered.shape[0]}")
     st.dataframe(am_filtered[[material_col, cust_ref_col]].head())
-    st.stop()
 
-    # Rest of processing disabled for debugging filter
-    # Build temp
+    # Build temporary table
     temp = am_filtered[[cust_ref_col, serial_col, desc_col, date_col]].copy()
     temp.columns = ['Customer Reference', 'Serial number', 'Short text for sales order item', 'Delivery Date']
     temp['Delivery Date'] = pd.to_datetime(temp['Delivery Date'], errors='coerce')
     temp['Year of construction'] = temp['Delivery Date'].dt.year.astype('Int64')
     temp['Month of construction'] = temp['Delivery Date'].dt.strftime('%m')
-    st.subheader("Temp after date parse")
+    st.subheader("Temporary Table")
     st.dataframe(temp.head())
 
-    # Prepare ZSD
+    # Prepare ZSD_PO_PER_SO merge
     zsd_cust = find_col(zsd_df, ['purch.doc', 'customer reference'])
     zsd_doc = find_col(zsd_df, ['document'])
     zsd_mat = find_col(zsd_df, ['material'])
@@ -109,37 +106,40 @@ if st.sidebar.button("Run Merge"):
         st.error("Ontbrekende kolommen in ZSD_PO_PER_SO.")
         st.stop()
     zsd_df = zsd_df.rename(columns={
-        zsd_cust: 'Customer Reference', zsd_doc: 'ZSD Document',
-        zsd_mat: 'ZSD Material', zsd_proj: 'Project Reference'
+        zsd_cust: 'Customer Reference',
+        zsd_doc: 'ZSD Document',
+        zsd_mat: 'ZSD Material',
+        zsd_proj: 'Project Reference'
     })[['Customer Reference','ZSD Document','ZSD Material','Project Reference']]
-    st.subheader("ZSD sample")
-    st.dataframe(zsd_df.head())
-
-    merged1 = temp.merge(zsd_df, on='Customer Reference', how='inner')
-    st.subheader("Merged1 (inner join)")
-    st.write(merged1.shape)
+    merged1 = temp.merge(zsd_df, on='Customer Reference', how='left')
+    st.subheader("Merge with ZSD_PO_PER_SO")
+    st.write(f"Rows: {merged1.shape[0]}, Matches: {merged1['ZSD Document'].notna().sum()}")
     st.dataframe(merged1.head())
 
-    # Prepare ZSTATUS
+    # Prepare ZSTATUS merge
     zs_doc = find_col(zstatus_df, ['document'])
-    zs_cols = {find_col(zstatus_df, [k.lower()]): k for k in ['Sold-to pt','Ship-to','CoSPa','Date OKWV']}
-    if not zs_doc or any(col is None for col in zs_cols.keys()):
+    zs_cols = {
+        'Sold-to pt': find_col(zstatus_df, ['sold-to']),
+        'Ship-to': find_col(zstatus_df, ['ship-to']),
+        'CoSPa': find_col(zstatus_df, ['cospa']),
+        'Date OKWV': find_col(zstatus_df, ['date okwv'])
+    }
+    if not zs_doc or any(v is None for v in zs_cols.values()):
         st.error("Ontbrekende kolommen in ZSTATUS.")
         st.stop()
-    zstatus_df = zstatus_df.rename(columns={zs_doc:'ZSD Document',**zs_cols})[['ZSD Document',*zs_cols.values()]]
-    st.subheader("ZSTATUS sample")
-    st.dataframe(zstatus_df.head())
-
+    zstatus_df = zstatus_df.rename(columns={zs_doc: 'ZSD Document', **zs_cols})[['ZSD Document', *zs_cols.keys()]]
     final_df = merged1.merge(zstatus_df, on='ZSD Document', how='left')
-    st.subheader("Final merged")
-    st.write(final_df.shape)
+    st.subheader("Final Merged DataFrame")
+    st.write(f"Rows: {final_df.shape[0]}")
     st.dataframe(final_df.head())
 
-    # Download
+    # Download result
     buffer = BytesIO()
     final_df.to_excel(buffer, index=False, sheet_name='MergedData')
     buffer.seek(0)
-    st.download_button("Download merged Excel", data=buffer,
+    st.download_button(
+        label="Download merged Excel",
+        data=buffer,
         file_name="merged_data.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
