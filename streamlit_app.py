@@ -10,8 +10,8 @@ am_log_file = st.sidebar.file_uploader("Upload AM LOG file", type=["xlsx", "xls"
 zsd_file = st.sidebar.file_uploader("Upload ZSD_PO_PER_SO file", type=["xlsx", "xls"], key="zsd")
 zstatus_file = st.sidebar.file_uploader("Upload ZSTATUS file", type=["xlsx", "xls"], key="zstatus")
 
-# Equipment number filter list
-EQUIPMENT_LIST = [
+# Material number filter list
+MATERIAL_LIST = [
     '000000000001001917','000000000001001808','000000000001001749',
     '000000000001001776','000000000001001911','000000000001001755',
     '000000000001001760','000000000001001809','000000000001001747',
@@ -24,14 +24,14 @@ EQUIPMENT_LIST = [
     '000000000001001777','000000000001001742','000000000001001813',
     '000000000001009719'
 ]
-EQUIPMENT_LIST = [e.zfill(18) for e in EQUIPMENT_LIST]
-CHECK_EQUIP = '000000000010001878'
-if CHECK_EQUIP in EQUIPMENT_LIST:
-    st.sidebar.info(f"Test value {CHECK_EQUIP} found in equipment list")
+MATERIAL_LIST = [m.zfill(18) for m in MATERIAL_LIST]
+CHECK_MATERIAL = '000000000010001878'
+if CHECK_MATERIAL in MATERIAL_LIST:
+    st.sidebar.info(f"Test value {CHECK_MATERIAL} found in material list")
 else:
-    st.sidebar.warning(f"Test value {CHECK_EQUIP} NOT found in equipment list")
+    st.sidebar.warning(f"Test value {CHECK_MATERIAL} NOT found in material list")
 
-def find_col(df, keyword_list):
+ def find_col(df, keyword_list):
     for kw in keyword_list:
         for col in df.columns:
             if kw.lower() in col.lower():
@@ -51,28 +51,28 @@ if st.sidebar.button("Run Merge"):
     zstatus_df = pd.read_excel(zstatus_file, dtype=str)
     zstatus_df.columns = zstatus_df.columns.str.strip()
 
-    # Identify equipment column
-    equip_col = find_col(am_df, ['equipment number', 'equipment'])
-    if not equip_col:
-        st.error("Kan kolom 'Equipment number' niet vinden in AM LOG.")
+    # Identify material number column
+    material_col = find_col(am_df, ['material number', 'material'])
+    if not material_col:
+        st.error("Kan kolom 'Material Number' niet vinden in AM LOG.")
         st.write(am_df.columns.tolist())
         st.stop()
 
-    # Clean equipment values to string of digits
-    am_df[equip_col] = (
-        am_df[equip_col]
+    # Clean material values to consistent 18-digit strings
+    am_df[material_col] = (
+        am_df[material_col]
         .astype(str)
         .str.strip()
         .str.replace(r"\.0$", "", regex=True)
         .str.zfill(18)
     )
 
-    # Debug cleaned equipment values
-    st.subheader("Equipment column cleaned & sample values")
-    st.write(f"Column used: '{equip_col}' with dtype {am_df[equip_col].dtype}")
-    st.write(am_df[equip_col].unique()[:10])
-    common = set(am_df[equip_col].unique()).intersection(EQUIPMENT_LIST)
-    st.write(f"Matches with EQUIPMENT_LIST: {len(common)} => {list(common)[:10]}")
+    # Debug cleaned material values
+    st.subheader("Material Number column cleaned & sample values")
+    st.write(f"Column used: '{material_col}' with dtype {am_df[material_col].dtype}")
+    st.write(am_df[material_col].unique()[:10])
+    common = set(am_df[material_col].unique()).intersection(MATERIAL_LIST)
+    st.write(f"Matches with MATERIAL_LIST: {len(common)} => {list(common)[:10]}")
 
     # Map other AM LOG cols
     cust_ref_col = find_col(am_df, ['customer reference', 'purch.doc', 'purch doc'])
@@ -83,14 +83,14 @@ if st.sidebar.button("Run Merge"):
         st.error("Ontbrekende kolommen in AM LOG voor verdere verwerking.")
         st.stop()
 
-    # Filter
-    am_filtered = am_df[am_df[equip_col].isin(EQUIPMENT_LIST)].copy()
-    st.subheader("Filtered AM LOG")
+    # Filter by material number
+    am_filtered = am_df[am_df[material_col].isin(MATERIAL_LIST)].copy()
+    st.subheader("Filtered AM LOG by Material Number")
     st.write(am_filtered.shape)
-    st.dataframe(am_filtered[[equip_col, cust_ref_col]].head())
+    st.dataframe(am_filtered[[material_col, cust_ref_col]].head())
     st.stop()
 
-    # ----- Rest of processing disabled while debugging filter -----
+    # Rest of processing disabled for debugging filter
     # Build temp
     temp = am_filtered[[cust_ref_col, serial_col, desc_col, date_col]].copy()
     temp.columns = ['Customer Reference', 'Serial number', 'Short text for sales order item', 'Delivery Date']
@@ -126,7 +126,7 @@ if st.sidebar.button("Run Merge"):
     if not zs_doc or any(col is None for col in zs_cols.keys()):
         st.error("Ontbrekende kolommen in ZSTATUS.")
         st.stop()
-    zstatus_df = zstatus_df.rename(columns={zs_doc:'ZSD Document', **zs_cols})[['ZSD Document', *zs_cols.values()]]
+    zstatus_df = zstatus_df.rename(columns={zs_doc:'ZSD Document',**zs_cols})[['ZSD Document',*zs_cols.values()]]
     st.subheader("ZSTATUS sample")
     st.dataframe(zstatus_df.head())
 
@@ -143,6 +143,3 @@ if st.sidebar.button("Run Merge"):
         file_name="merged_data.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
-
-
