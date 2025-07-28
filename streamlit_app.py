@@ -36,7 +36,7 @@ else:
 def find_col(df, keyword_list):
     for kw in keyword_list:
         for col in df.columns:
-            if kw.lower() in col.lower():
+            if kw.lower() == col.lower() or kw.lower() in col.lower():
                 return col
     return None
 
@@ -55,7 +55,7 @@ if st.sidebar.button("Run Merge"):
     zstatus_df.columns = zstatus_df.columns.str.strip()
 
     # Identify and clean Material Number column in AM LOG
-    material_col = find_col(am_df, ['material number', 'material'])
+    material_col = find_col(am_df, ['material number']) or find_col(am_df, ['material'])
     if not material_col:
         st.error("Kan kolom 'Material Number' niet vinden in AM LOG.")
         st.write(am_df.columns.tolist())
@@ -73,13 +73,14 @@ if st.sidebar.button("Run Merge"):
     common = set(am_df[material_col].unique()).intersection(MATERIAL_LIST)
     st.write(f"Matches: {len(common)} -> {list(common)[:10]}")
 
-    # Map other AM LOG columns
-    cust_ref_col = find_col(am_df, ['customer reference', 'purch.doc', 'purch doc'])
-    serial_col = find_col(am_df, ['serial'])
-    desc_col = find_col(am_df, ['short text', 'description'])
-    date_col = find_col(am_df, ['delivery date', 'date'])
+    # Map other AM LOG columns, prioritizing exact matches
+    cust_ref_col = find_col(am_df, ['customer reference', 'purch.doc'])
+    serial_col = find_col(am_df, ['serial number']) or find_col(am_df, ['serial'])
+    desc_col = find_col(am_df, ['short text']) or find_col(am_df, ['description'])
+    date_col = find_col(am_df, ['delivery date']) or find_col(am_df, ['date'])
     if not all([cust_ref_col, serial_col, desc_col, date_col]):
         st.error("Ontbrekende kolommen in AM LOG voor verdere verwerking.")
+        st.write(am_df.columns.tolist())
         st.stop()
 
     # Filter AM LOG on Material Number
@@ -104,6 +105,7 @@ if st.sidebar.button("Run Merge"):
     zsd_proj = find_col(zsd_df, ['project reference'])
     if not all([zsd_cust, zsd_doc, zsd_mat, zsd_proj]):
         st.error("Ontbrekende kolommen in ZSD_PO_PER_SO.")
+        st.write(zsd_df.columns.tolist())
         st.stop()
     zsd_df = zsd_df.rename(columns={
         zsd_cust: 'Customer Reference',
@@ -119,13 +121,14 @@ if st.sidebar.button("Run Merge"):
     # Prepare ZSTATUS merge
     zs_doc = find_col(zstatus_df, ['document'])
     zs_cols = {
-        'Sold-to pt': find_col(zstatus_df, ['sold-to']),
+        'Sold-to pt': find_col(zstatus_df, ['sold-to pt']) or find_col(zstatus_df, ['sold-to']),
         'Ship-to': find_col(zstatus_df, ['ship-to']),
         'CoSPa': find_col(zstatus_df, ['cospa']),
         'Date OKWV': find_col(zstatus_df, ['date okwv'])
     }
     if not zs_doc or any(v is None for v in zs_cols.values()):
         st.error("Ontbrekende kolommen in ZSTATUS.")
+        st.write(zstatus_df.columns.tolist())
         st.stop()
     zstatus_df = zstatus_df.rename(columns={zs_doc: 'ZSD Document', **zs_cols})[['ZSD Document', *zs_cols.keys()]]
     final_df = merged1.merge(zstatus_df, on='ZSD Document', how='left')
